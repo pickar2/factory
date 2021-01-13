@@ -1,5 +1,8 @@
 package xyz.sathro.factory.util;
 
+import org.joml.Matrix3d;
+import org.joml.Vector3d;
+
 public class Maths {
 	public static final float PI = (float) Math.PI;
 	public static final float PIOver2 = (float) (Math.PI / 2);
@@ -53,5 +56,15 @@ public class Maths {
 
 	public static short max(short first, short second) {
 		return first > second ? first : second;
+	}
+
+	public static Matrix3d diagonalFromVector(Vector3d vector) {
+		final Matrix3d ret = new Matrix3d();
+
+		ret.m00 = vector.x;
+		ret.m11 = vector.y;
+		ret.m22 = vector.z;
+
+		return ret;
 	}
 }

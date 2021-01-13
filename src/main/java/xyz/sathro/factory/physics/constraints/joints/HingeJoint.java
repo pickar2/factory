@@ -7,7 +7,7 @@ import xyz.sathro.factory.physics.constraints.Constraint;
 
 import static xyz.sathro.factory.physics.XPBD.*;
 
-public class HingeJoint extends Constraint {
+public class HingeJoint extends Joint {
 	public HingeJoint(Body body0, Body body1, Pose localPose0, Pose localPose1) {
 		super(body0, body1, localPose0, localPose1);
 	}

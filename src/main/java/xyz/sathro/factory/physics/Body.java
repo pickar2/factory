@@ -14,7 +14,7 @@ public class Body implements IPhysicsEntity {
 	public final Pose origPose;
 
 	public final Vector3d velocity = new Vector3d(0);
-	public final Vector3d omega = new Vector3d(0);
+	public final Vector3d angularVelocity = new Vector3d(0);
 	public final Vector3d invInertia = new Vector3d(1);
 	public final Mesh mesh;
 	public double invMass = 1;
@@ -64,7 +64,7 @@ public class Body implements IPhysicsEntity {
 		prevPose.set(pose);
 		velocity.add(new Vector3d(gravity).mul(dt));
 		pose.position.add(new Vector3d(velocity).mul(dt));
-		applyRotation(omega, dt);
+		applyRotation(angularVelocity, dt);
 	}
 
 	public void update(double dt) {
@@ -72,9 +72,9 @@ public class Body implements IPhysicsEntity {
 		velocity.mul(1 / dt);
 		final Quaterniond dq = new Quaterniond();
 		dq.set(new Quaterniond(pose.rotation).mul(new Quaterniond(prevPose.rotation).conjugate()));
-		omega.set(dq.x * 2.0 / dt, dq.y * 2.0 / dt, dq.z * 2.0 / dt);
+		angularVelocity.set(dq.x * 2.0 / dt, dq.y * 2.0 / dt, dq.z * 2.0 / dt);
 		if (dq.w < 0) {
-			omega.mul(-1);
+			angularVelocity.mul(-1);
 		}
 
 //         this.omega.mul(1.0f - 1.0f * dt);
@@ -87,7 +87,7 @@ public class Body implements IPhysicsEntity {
 	public Vector3d getVelocityAt(Vector3d pos) {
 		final Vector3d velocity = new Vector3d();
 		pos.sub(pose.position, velocity);
-		velocity.cross(omega);
+		velocity.cross(angularVelocity);
 		this.velocity.sub(velocity, velocity);
 
 		return velocity;
@@ -137,7 +137,7 @@ public class Body implements IPhysicsEntity {
 		pose.rotate(dq);
 
 		if (velocityLevel) {
-			omega.add(dq);
+			angularVelocity.add(dq);
 		} else {
 			applyRotation(dq);
 		}

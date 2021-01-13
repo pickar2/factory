@@ -192,8 +192,8 @@ public class HouseRenderer implements IRenderer {
 		VkPipelineDepthStencilStateCreateInfo depthStencilDepth = Vulkan.createDepthStencil(VK_COMPARE_OP_LESS, true);
 		VkPipelineDepthStencilStateCreateInfo depthStencilColor = Vulkan.createDepthStencil(VK_COMPARE_OP_EQUAL, false);
 
-		pipelines[0] = Vulkan.createGraphicsPipeline(shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingDepth, pipelineLayout, depthStencilDepth); //depth write pipeline
-		pipelines[1] = Vulkan.createGraphicsPipeline(shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingColor, pipelineLayout, depthStencilColor); //color write pipeline
+		pipelines[0] = Vulkan.createGraphicsPipeline(HouseVertex.class, shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingDepth, pipelineLayout, depthStencilDepth); //depth write pipeline
+		pipelines[1] = Vulkan.createGraphicsPipeline(HouseVertex.class, shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingColor, pipelineLayout, depthStencilColor); //color write pipeline
 
 		vkDestroyShaderModule(Vulkan.device, vertShaderModule, null);
 		vkDestroyShaderModule(Vulkan.device, fragShaderModule, null);
