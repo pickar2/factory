@@ -11,6 +11,7 @@ import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.util.vma.VmaAllocatorCreateInfo;
 import org.lwjgl.util.vma.VmaVulkanFunctions;
 import org.lwjgl.vulkan.*;
+import xyz.sathro.factory.util.Maths;
 import xyz.sathro.factory.util.PathUtils;
 import xyz.sathro.factory.vulkan.models.*;
 import xyz.sathro.factory.vulkan.renderer.MainRenderer;
@@ -29,7 +30,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -47,12 +47,13 @@ import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2;
+import static xyz.sathro.factory.Engine.debugMode;
 import static xyz.sathro.factory.util.Maths.clamp;
 import static xyz.sathro.factory.vulkan.utils.BufferUtils.asPointerBuffer;
 import static xyz.sathro.factory.vulkan.utils.VulkanUtils.VkCheck;
 
 public class Vulkan {
-	private static final Logger log = LogManager.getLogger(Vulkan.class);
+	private static final Logger logger = LogManager.getLogger(Vulkan.class);
 
 	public static final long UINT64_MAX = 0xFFFFFFFFFFFFFFFFL;
 	public static final int UINT32_MAX = 0xFFFFFFFF;
@@ -78,23 +79,24 @@ public class Vulkan {
 			"VK_LAYER_LUNARG_monitor"
 	).collect(toSet());
 	private static final boolean msaaEnabled = false; // TODO: proper support for turning msaa on and off
-	public static VkInstance instance;
+	public static final VkInstance instance;
+	public static final VkDevice device;
+	public static final long vmaAllocator;
+	public static final QueueFamilies queues;
+	public static final long surfaceHandle;
+	public static final VkPhysicalDevice physicalDevice;
+	public static final VkDebugUtilsMessengerCreateInfoEXT debugMessenger;
+	public static final VkDebugUtilsMessengerCallbackEXT debugCallback;
+	public static final long debugMessengerHandle;
+	public static final long commandPool;
+	public static final boolean integratedGPU;
+
 	public static int msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-	public static VkDevice device;
 	public static boolean framebufferResize;
-	public static long vmaAllocator;
-	public static QueueFamilies queues;
-	public static long surfaceHandle;
-	public static boolean debugMode = true;
-	public static VkPhysicalDevice physicalDevice;
-	public static VkDebugUtilsMessengerCreateInfoEXT debugMessenger;
-	public static VkDebugUtilsMessengerCallbackEXT debugCallback;
-	public static long debugMessengerHandle;
 	public static List<Long> swapChainImages;
 	public static VkExtent2D swapChainExtent;
 	public static VulkanImage colorImage;
 	public static VulkanImage depthImage;
-	public static long commandPool;
 	public static long windowHandle;
 	private static GLFWFramebufferSizeCallback windowResizeCallback;
 	public static long swapChain;
@@ -102,7 +104,50 @@ public class Vulkan {
 	public static List<Long> swapChainImageViews;
 	public static List<Long> swapChainFramebuffers;
 	public static long renderPass;
-	public static boolean integratedGPU = false;
+
+	static {
+		initWindow();
+
+		if (debugMode) {
+			debugCallback = new VkDebugUtilsMessengerCallbackEXT() {
+				@Override
+				public int invoke(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
+					VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
+					logger.warn(("[VULKAN] " + data.pMessageString()));
+					return 0;
+				}
+			};
+			debugMessenger = getDebugMessenger();
+		} else {
+			debugCallback = null;
+			debugMessenger = null;
+		}
+
+		instance = createVkInstance();
+
+		if (debugMode) {
+			debugMessengerHandle = setupDebugging();
+		} else {
+			debugMessengerHandle = VK_NULL_HANDLE;
+		}
+		surfaceHandle = createSurface();
+
+		physicalDevice = pickPhysicalDevice();
+		final VkPhysicalDeviceProperties physicalDeviceProperties = VkPhysicalDeviceProperties.malloc();
+		vkGetPhysicalDeviceProperties(physicalDevice, physicalDeviceProperties);
+
+		integratedGPU = physicalDeviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+		physicalDeviceProperties.free();
+
+		queues = findQueueFamilies(physicalDevice);
+		device = createLogicalDevice();
+
+		createDeviceQueues();
+
+		vmaAllocator = createAllocator();
+
+		commandPool = createCommandPool(0, queues.graphics);
+	}
 
 	private Vulkan() { }
 
@@ -626,19 +671,6 @@ public class Vulkan {
 		vkFreeCommandBuffers(device, commandPool, commandBuffer);
 	}
 
-	private static void runSingleTimeCommand(Consumer<VkCommandBuffer> consumer, MemoryStack stack) {
-		final VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, stack);
-		consumer.accept(commandBuffer);
-		endSingleTimeCommands(commandBuffer, commandPool, queues.graphics, stack);
-	}
-
-	public static void runSingleTimeCommand(Consumer<VkCommandBuffer> consumer, VulkanQueue queue, Runnable callback, MemoryStack stack) {
-		final VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, stack);
-		consumer.accept(commandBuffer);
-		endSingleTimeCommands(commandBuffer, commandPool, queue, stack);
-		callback.run();
-	}
-
 	private static VkCommandBuffer beginSingleTimeCommands(long commandPool, MemoryStack stack) {
 		final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.callocStack(stack)
 				.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
@@ -866,7 +898,6 @@ public class Vulkan {
 	}
 
 	public static void run() {
-		initWindow();
 		initVulkan();
 		MainRenderer.mainLoop();
 		cleanup();
@@ -897,58 +928,11 @@ public class Vulkan {
 	}
 
 	private static void initVulkan() {
-		if (debugMode) {
-			debugCallback = new VkDebugUtilsMessengerCallbackEXT() {
-				@Override
-				public int invoke(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
-					VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
-					log.warn(("[VULKAN] " + data.pMessageString()));
-					return 0;
-				}
-			};
-			debugMessenger = getDebugMessenger();
-		} else {
-			debugCallback = null;
-			debugMessenger = null;
-		}
-
-		instance = createVkInstance();
-
-		if (debugMode) {
-			debugMessengerHandle = setupDebugging();
-		} else {
-			debugMessengerHandle = VK_NULL_HANDLE;
-		}
-		surfaceHandle = createSurface();
-
-		physicalDevice = pickPhysicalDevice();
-		VkPhysicalDeviceProperties physicalDeviceProperties = VkPhysicalDeviceProperties.malloc();
-		vkGetPhysicalDeviceProperties(physicalDevice, physicalDeviceProperties);
-
-		if (physicalDeviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
-			integratedGPU = true;
-		}
-		physicalDeviceProperties.free();
-
-		queues = findQueueFamilies(physicalDevice);
-		device = createLogicalDevice();
-
-		createDeviceQueues();
-
-		vmaAllocator = createAllocator();
-
-		commandPool = createCommandPool(0, queues.graphics);
-
-		createSwapChain();
-		createImageViews();
-		createRenderPass();
-		if (msaaEnabled) { createColorResources(); }
-		createDepthResources();
-		createFramebuffers();
+		createSwapChainObjects();
 
 		MainRenderer.init();
 
-		log.info("VULKAN READY");
+		logger.info("VULKAN READY");
 	}
 
 	private static void cleanupSwapChain() {
@@ -973,6 +957,7 @@ public class Vulkan {
 		VulkanUtils.dispose();
 		DefaultCommandPools.dispose();
 		defaultSignaledFenceInfo.free();
+		defaultFenceInfo.free();
 
 		vkDestroyCommandPool(device, commandPool, null);
 
@@ -1013,6 +998,7 @@ public class Vulkan {
 
 		cleanupSwapChain();
 		createSwapChainObjects();
+		MainRenderer.createSwapChainObjects();
 	}
 
 	private static void createSwapChainObjects() {
@@ -1022,8 +1008,6 @@ public class Vulkan {
 		if (msaaEnabled) { createColorResources(); }
 		createDepthResources();
 		createFramebuffers();
-
-		MainRenderer.createSwapChainObjects();
 	}
 
 	private static void createSwapChain() {
@@ -1278,10 +1262,6 @@ public class Vulkan {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
-	private static double log2(double n) {
-		return Math.log(n) / Math.log(2);
-	}
-
 	public static VulkanImage createTextureImage(String filename) {
 		try (final MemoryStack stack = stackPush()) {
 			final IntBuffer pWidth = stack.mallocInt(1);
@@ -1290,7 +1270,7 @@ public class Vulkan {
 
 			final ByteBuffer pixels = stbi_load(PathUtils.fromString(filename).toString(), pWidth, pHeight, pChannels, STBI_rgb_alpha);
 
-			final int mipLevels = (int) Math.floor(log2(Math.max(pWidth.get(0), pHeight.get(0)))) + 1;
+			final int mipLevels = (int) Math.floor(Maths.log2(Math.max(pWidth.get(0), pHeight.get(0)))) + 1;
 
 			if (pixels == null) {
 				throw new RuntimeException("Failed to load texture image " + filename + ", " + stbi_failure_reason());

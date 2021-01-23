@@ -75,7 +75,9 @@ public class MainRenderer {
 			if (imagesInFlight.containsKey(imageIndex)) {
 				vkWaitForFences(device, imagesInFlight.get(imageIndex).fence(), true, UINT64_MAX);
 			} else {
-				vkQueueWaitIdle(queues.present.queue);
+				synchronized (queues.present.index) {
+					vkQueueWaitIdle(queues.present.queue);
+				}
 			}
 
 			boolean dirty = false;
@@ -104,8 +106,9 @@ public class MainRenderer {
 					.pCommandBuffers(stack.pointers(primaryCommandBuffers[imageIndex]));
 
 			vkResetFences(device, currentFrame.pFence());
-
-			vkResult = vkQueueSubmit(queues.graphics.queue, submitInfo, currentFrame.fence());
+			synchronized (queues.graphics.index) {
+				vkResult = vkQueueSubmit(queues.graphics.queue, submitInfo, currentFrame.fence());
+			}
 			if (vkResult != VK_SUCCESS) {
 				vkResetFences(device, currentFrame.pFence());
 				throw new RuntimeException("Failed to submit draw command buffer: " + VKReturnCode.getByCode(vkResult));
@@ -118,7 +121,9 @@ public class MainRenderer {
 					.pSwapchains(stack.longs(swapChain))
 					.pImageIndices(pImageIndex);
 
-			vkResult = vkQueuePresentKHR(queues.present.queue, presentInfo);
+			synchronized (queues.present.index) {
+				vkResult = vkQueuePresentKHR(queues.present.queue, presentInfo);
+			}
 			if (vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR || framebufferResize) {
 				framebufferResize = false;
 				recreateSwapChain();

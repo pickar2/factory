@@ -12,6 +12,10 @@ public class Maths {
 		return getMinBitCount(number) - 1;
 	}
 
+	public static double log2(double number) {
+		return Math.log(number) / log2;
+	}
+
 	public static int clamp(int number, int min, int max) {
 		return Math.max(min, Math.min(number, max));
 	}

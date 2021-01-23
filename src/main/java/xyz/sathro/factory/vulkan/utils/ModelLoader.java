@@ -18,12 +18,12 @@ public class ModelLoader {
 	private ModelLoader() { }
 
 	public static Model loadModel(String resource, int flags) {
-		AIScene scene = AIFileLoader.readFile(resource, flags);
+		final AIScene scene = AIFileLoader.readFile(resource, flags);
 
 		if (scene == null || scene.mRootNode() == null) {
 			throw new RuntimeException("Could not load model: " + aiGetErrorString());
 		}
-		Model model = new Model();
+		final Model model = new Model();
 		processNode(requireNonNull(scene.mRootNode()), scene, model);
 
 		return model;
@@ -34,9 +34,8 @@ public class ModelLoader {
 			processNodeMeshes(scene, node, model);
 		}
 
-		if (node.mChildren() != null) {
-			PointerBuffer children = node.mChildren();
-
+		final PointerBuffer children = node.mChildren();
+		if (children != null) {
 			for (int i = 0; i < node.mNumChildren(); i++) {
 				processNode(AINode.create(children.get(i)), scene, model);
 			}
@@ -44,12 +43,14 @@ public class ModelLoader {
 	}
 
 	private static void processNodeMeshes(AIScene scene, AINode node, Model model) {
-		PointerBuffer pMeshes = scene.mMeshes();
-		IntBuffer meshIndices = node.mMeshes();
+		final PointerBuffer pMeshes = scene.mMeshes();
+		final IntBuffer meshIndices = node.mMeshes();
 
-		for (int i = 0; i < meshIndices.capacity(); i++) {
-			AIMesh mesh = AIMesh.create(pMeshes.get(meshIndices.get(i)));
-			processMesh(scene, mesh, model);
+		if (pMeshes != null && meshIndices != null) {
+			for (int i = 0; i < meshIndices.capacity(); i++) {
+				AIMesh mesh = AIMesh.create(pMeshes.get(meshIndices.get(i)));
+				processMesh(scene, mesh, model);
+			}
 		}
 	}
 
@@ -61,16 +62,16 @@ public class ModelLoader {
 	}
 
 	private static void processPositions(AIMesh mesh, List<Vector3f> positions) {
-		AIVector3D.Buffer vertices = requireNonNull(mesh.mVertices());
+		final AIVector3D.Buffer vertices = requireNonNull(mesh.mVertices());
 
 		for (int i = 0; i < vertices.capacity(); i++) {
-			AIVector3D position = vertices.get(i);
+			final AIVector3D position = vertices.get(i);
 			positions.add(new Vector3f(position.x(), position.y(), position.z()));
 		}
 	}
 
 	private static void processTexCoords(AIMesh mesh, List<Vector2f> texCoords) {
-		AIVector3D.Buffer aiTexCoords = requireNonNull(mesh.mTextureCoords(0));
+		final AIVector3D.Buffer aiTexCoords = requireNonNull(mesh.mTextureCoords(0));
 
 		for (int i = 0; i < aiTexCoords.capacity(); i++) {
 			final AIVector3D coords = aiTexCoords.get(i);
@@ -79,11 +80,11 @@ public class ModelLoader {
 	}
 
 	private static void processIndices(AIMesh mesh, List<Integer> indices) {
-		AIFace.Buffer aiFaces = mesh.mFaces();
+		final AIFace.Buffer aiFaces = mesh.mFaces();
 
 		for (int i = 0; i < mesh.mNumFaces(); i++) {
-			AIFace face = aiFaces.get(i);
-			IntBuffer pIndices = face.mIndices();
+			final AIFace face = aiFaces.get(i);
+			final IntBuffer pIndices = face.mIndices();
 
 			for (int j = 0; j < face.mNumIndices(); j++) {
 				indices.add(pIndices.get(j));

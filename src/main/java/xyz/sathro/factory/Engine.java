@@ -11,34 +11,45 @@ import xyz.sathro.factory.vulkan.Vulkan;
 import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentMap;
 
-import static xyz.sathro.factory.vulkan.Vulkan.debugMode;
-
 public class Engine {
-	private static final Logger log = LogManager.getLogger(Engine.class);
+	private static final Logger logger = LogManager.getLogger(Engine.class);
+	public static boolean debugMode = true;
 
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException, ClassNotFoundException {
-		log.info("START");
+		logger.info("START");
+
 		if (args.length > 0) {
 			debugMode = Boolean.parseBoolean(args[0]);
 		}
 
 		if (debugMode) {
-//			Configuration.DEBUG.set(true);
-//			Configuration.DEBUG_FUNCTIONS.set(true);
 			Configuration.DEBUG_MEMORY_ALLOCATOR.set(true);
 			Configuration.DEBUG_STACK.set(true);
 		}
+
 		try {
 			Vulkan.run();
 		} catch (Throwable e) {
-			// hack to turn off memory leaks print if exception was caught, because they are useless in this scenario
-			Class<?> clazz = Class.forName("org.lwjgl.system.MemoryManage$DebugAllocator");
-			Field field1 = clazz.getDeclaredField("ALLOCATIONS");
-			field1.setAccessible(true);
-			((ConcurrentMap<Long, ?>) field1.get(null)).clear();
+			if (debugMode) {
+				// hack to turn off memory leaks print if exception was caught, because they are useless in this scenario
+				final Class<?> debugAllocator = Class.forName("org.lwjgl.system.MemoryManage$DebugAllocator");
+				final Field allocations = debugAllocator.getDeclaredField("ALLOCATIONS");
+				allocations.setAccessible(true);
+				((ConcurrentMap<Long, ?>) allocations.get(null)).clear();
+
+				final Class<?> memoryUtilLazyInit = Class.forName("org.lwjgl.system.MemoryUtil$LazyInit");
+				final Field allocator = memoryUtilLazyInit.getDeclaredField("ALLOCATOR");
+				allocator.setAccessible(true);
+
+				final Field callbacks = debugAllocator.getDeclaredField("callbacks");
+				callbacks.setAccessible(true);
+				callbacks.set(allocator.get(null), new long[0]);
+			}
+
 			throw e;
 		}
-		log.info("END");
+
+		logger.info("END");
 	}
 }
