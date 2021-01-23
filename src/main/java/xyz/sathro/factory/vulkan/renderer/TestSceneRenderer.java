@@ -1,9 +1,7 @@
 package xyz.sathro.factory.vulkan.renderer;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import lombok.SneakyThrows;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
@@ -25,7 +23,7 @@ import xyz.sathro.factory.vulkan.descriptors.DescriptorSetLayout;
 import xyz.sathro.factory.vulkan.models.CombinedBuffer;
 import xyz.sathro.factory.vulkan.models.VulkanBuffer;
 import xyz.sathro.factory.vulkan.models.VulkanPipeline;
-import xyz.sathro.factory.vulkan.models.VulkanPipelineBuilder;
+import xyz.sathro.factory.vulkan.utils.VulkanPipelineBuilder;
 import xyz.sathro.factory.vulkan.utils.VulkanUtils;
 import xyz.sathro.factory.vulkan.vertex.IVertex;
 import xyz.sathro.factory.vulkan.vertex.TestVertex;
@@ -33,7 +31,10 @@ import xyz.sathro.factory.vulkan.vertex.TestVertex;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 import static org.lwjgl.glfw.GLFW.glfwGetTime;
 import static org.lwjgl.system.MemoryStack.stackPush;
@@ -63,10 +64,6 @@ public class TestSceneRenderer implements IRenderer {
 	private boolean cbChanged = false;
 
 	private TestSceneRenderer() { }
-
-	private long createCommandPool() {
-		return Vulkan.createCommandPool(0, Vulkan.queues.graphics.index);
-	}
 
 	private VulkanBuffer[] createUniformBuffers(int size) {
 		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
@@ -232,7 +229,7 @@ public class TestSceneRenderer implements IRenderer {
 
 	@Override
 	public void init() {
-		commandPool = createCommandPool();
+		commandPool = Vulkan.createCommandPool(0, Vulkan.queues.graphics);
 		descriptorSetLayout = createDescriptorSetLayout();
 		octreeDescriptorSetLayout = createOctreeDescriptorSetLayout();
 
@@ -386,12 +383,25 @@ public class TestSceneRenderer implements IRenderer {
 	public void beforeFrame(int imageIndex) {
 		dirty = true;
 
-		XPBD.simulate(bodies, constraints, 1 / 60f, 120, new Vector3d(0, -10, 0));
 		Octree octree = new Octree();
 
 		for (Body body : bodies) {
 			octree.insertEntity(body);
 		}
+
+//		List<Constraint> collisionConstraints = new ObjectArrayList<>();
+
+//		for (Pair<IPhysicsEntity, IPhysicsEntity> collisionPair : octree.getAllCollisionPairs()) {
+//			Body body0 = (Body) collisionPair.getKey();
+//			Body body1 = (Body) collisionPair.getValue();
+//
+//			collisionConstraints.add(new RigidBodyContactConstraint(body0, body1, body0.pose.position, body1.pose.position, new Vector3d(body1.pose.position).cross(body0.pose.position), 0.1, 0.1, 0.1));
+//		}
+//		constraints.addAll(collisionConstraints);
+
+		XPBD.simulate(bodies, constraints, 1 / 60f, 120, new Vector3d(0, -10, 0));
+
+//		constraints.removeAll(collisionConstraints);
 
 		List<IVertex> octreeVertices = getOctreeVertices(octree);
 

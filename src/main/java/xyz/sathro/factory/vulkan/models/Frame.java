@@ -3,6 +3,9 @@ package xyz.sathro.factory.vulkan.models;
 import java.nio.LongBuffer;
 
 import static org.lwjgl.system.MemoryStack.stackGet;
+import static org.lwjgl.vulkan.VK10.vkDestroyFence;
+import static org.lwjgl.vulkan.VK10.vkDestroySemaphore;
+import static xyz.sathro.factory.vulkan.Vulkan.device;
 
 public class Frame {
 	private final long imageAvailableSemaphore;
@@ -37,5 +40,11 @@ public class Frame {
 
 	public LongBuffer pFence() {
 		return stackGet().longs(fence);
+	}
+
+	public void dispose() {
+		vkDestroySemaphore(device, renderFinishedSemaphore(), null);
+		vkDestroySemaphore(device, imageAvailableSemaphore(), null);
+		vkDestroyFence(device, fence(), null);
 	}
 }

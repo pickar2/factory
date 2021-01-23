@@ -5,17 +5,40 @@ package xyz.sathro.factory;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.system.Configuration;
 import xyz.sathro.factory.vulkan.Vulkan;
+
+import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentMap;
+
+import static xyz.sathro.factory.vulkan.Vulkan.debugMode;
 
 public class Engine {
 	private static final Logger log = LogManager.getLogger(Engine.class);
 
-	public static void main(String[] args) {
+	@SuppressWarnings("unchecked")
+	public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException, ClassNotFoundException {
 		log.info("START");
 		if (args.length > 0) {
-			Vulkan.debugMode = Boolean.parseBoolean(args[0]);
+			debugMode = Boolean.parseBoolean(args[0]);
 		}
-		Vulkan.run();
+
+		if (debugMode) {
+//			Configuration.DEBUG.set(true);
+//			Configuration.DEBUG_FUNCTIONS.set(true);
+			Configuration.DEBUG_MEMORY_ALLOCATOR.set(true);
+			Configuration.DEBUG_STACK.set(true);
+		}
+		try {
+			Vulkan.run();
+		} catch (Throwable e) {
+			// hack to turn off memory leaks print if exception was caught, because they are useless in this scenario
+			Class<?> clazz = Class.forName("org.lwjgl.system.MemoryManage$DebugAllocator");
+			Field field1 = clazz.getDeclaredField("ALLOCATIONS");
+			field1.setAccessible(true);
+			((ConcurrentMap<Long, ?>) field1.get(null)).clear();
+			throw e;
+		}
 		log.info("END");
 	}
 }

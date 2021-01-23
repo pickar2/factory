@@ -59,12 +59,6 @@ public class Maths {
 	}
 
 	public static Matrix3d diagonalFromVector(Vector3d vector) {
-		final Matrix3d ret = new Matrix3d();
-
-		ret.m00 = vector.x;
-		ret.m11 = vector.y;
-		ret.m22 = vector.z;
-
-		return ret;
+		return new Matrix3d(vector.x, 0, 0, 0, vector.y, 0, 0, 0, vector.z);
 	}
 }

@@ -1,9 +1,11 @@
 package xyz.sathro.factory.physics;
 
 import lombok.Getter;
+import org.joml.Matrix3d;
 import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import xyz.sathro.factory.collision.AABB;
+import xyz.sathro.factory.util.Maths;
 import xyz.sathro.factory.vulkan.models.Mesh;
 
 public class Body implements IPhysicsEntity {
@@ -27,6 +29,17 @@ public class Body implements IPhysicsEntity {
 		this.origPose = pose.clone();
 
 		this.mesh = mesh;
+	}
+
+	public Matrix3d getInertiaTensorInverseW() {
+		final Matrix3d inertia = new Matrix3d();
+		if (invMass != 0) {
+			final Matrix3d rotMatrix = new Matrix3d().rotation(pose.rotation);
+
+			inertia.set(rotMatrix).mul(Maths.diagonalFromVector(invInertia)).mul(rotMatrix.transpose());
+		}
+
+		return inertia;
 	}
 
 	public void setBox(Vector3d size, double density) {

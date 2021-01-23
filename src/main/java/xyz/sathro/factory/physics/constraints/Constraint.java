@@ -1,10 +1,6 @@
 package xyz.sathro.factory.physics.constraints;
 
-import org.joml.Vector3d;
 import xyz.sathro.factory.physics.Body;
-import xyz.sathro.factory.physics.Pose;
-
-import static xyz.sathro.factory.physics.XPBD.applyBodyPairCorrection;
 
 public abstract class Constraint {
 	protected final Body body0;
@@ -18,5 +14,6 @@ public abstract class Constraint {
 	}
 
 	public abstract void solveVel(double dt);
+
 	public abstract void solvePos(double dt);
 }

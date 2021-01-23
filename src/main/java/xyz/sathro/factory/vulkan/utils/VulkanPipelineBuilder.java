@@ -1,8 +1,9 @@
-package xyz.sathro.factory.vulkan.models;
+package xyz.sathro.factory.vulkan.utils;
 
 import org.lwjgl.vulkan.*;
 import xyz.sathro.factory.vulkan.Vulkan;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorSetLayout;
+import xyz.sathro.factory.vulkan.models.VulkanPipeline;
 import xyz.sathro.factory.vulkan.vertex.IVertex;
 
 import java.util.function.Consumer;

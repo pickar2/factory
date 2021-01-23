@@ -55,10 +55,6 @@ public class HouseRenderer implements IRenderer {
 
 	private HouseRenderer() { }
 
-	private long createCommandPool() {
-		return Vulkan.createCommandPool(0, Vulkan.queues.graphics.index);
-	}
-
 	private VulkanBuffer[] createUniformBuffers() {
 		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
 
@@ -219,7 +215,7 @@ public class HouseRenderer implements IRenderer {
 
 	@Override
 	public void init() {
-		commandPool = createCommandPool();
+		commandPool = Vulkan.createCommandPool(0, Vulkan.queues.graphics);
 		descriptorSetLayout = createDescriptorSetLayout();
 		textureImage = Vulkan.createTextureImage("textures/chalet.jpg");
 		textureSampler = Vulkan.createTextureSampler();
