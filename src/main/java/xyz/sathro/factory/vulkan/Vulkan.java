@@ -632,6 +632,13 @@ public class Vulkan {
 		endSingleTimeCommands(commandBuffer, commandPool, queues.graphics, stack);
 	}
 
+	public static void runSingleTimeCommand(Consumer<VkCommandBuffer> consumer, VulkanQueue queue, Runnable callback, MemoryStack stack) {
+		final VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, stack);
+		consumer.accept(commandBuffer);
+		endSingleTimeCommands(commandBuffer, commandPool, queue, stack);
+		callback.run();
+	}
+
 	private static VkCommandBuffer beginSingleTimeCommands(long commandPool, MemoryStack stack) {
 		final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.callocStack(stack)
 				.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
@@ -940,8 +947,6 @@ public class Vulkan {
 		createFramebuffers();
 
 		MainRenderer.init();
-
-		MainRenderer.createSyncObjects();
 
 		log.info("VULKAN READY");
 	}
@@ -1324,66 +1329,75 @@ public class Vulkan {
 			if ((formatProperties.optimalTilingFeatures() & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0) {
 				throw new RuntimeException("Texture image format does not support linear blitting");
 			}
-			runSingleTimeCommand((commandBuffer) -> {
-				final VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.callocStack(1, stack);
-				barrier.sType(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
-				barrier.image(image);
-				barrier.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-				barrier.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-				barrier.dstAccessMask(VK_QUEUE_FAMILY_IGNORED);
-				barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-				barrier.subresourceRange().baseArrayLayer(0);
-				barrier.subresourceRange().layerCount(1);
-				barrier.subresourceRange().levelCount(1);
 
-				int mipWidth = width;
-				int mipHeight = height;
+			final VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, stack);
 
-				for (int i = 1; i < mipLevels; i++) {
-					barrier.subresourceRange().baseMipLevel(i - 1);
-					barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-					barrier.newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-					barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
-					barrier.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+			final VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.callocStack(1, stack)
+					.sType(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER)
+					.image(image)
+					.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+					.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+					.dstAccessMask(VK_QUEUE_FAMILY_IGNORED);
+			barrier.subresourceRange()
+					.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+					.baseArrayLayer(0)
+					.layerCount(1)
+					.levelCount(1);
 
-					vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, null, barrier);
+			int mipWidth = width;
+			int mipHeight = height;
 
-					VkImageBlit.Buffer blit = VkImageBlit.callocStack(1, stack);
-					blit.srcOffsets(0).set(0, 0, 0);
-					blit.srcOffsets(1).set(mipWidth, mipHeight, 1);
-					blit.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-					blit.srcSubresource().mipLevel(i - 1);
-					blit.srcSubresource().baseArrayLayer(0);
-					blit.srcSubresource().layerCount(1);
-					blit.dstOffsets(0).set(0, 0, 0);
-					blit.dstOffsets(1).set(mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1);
-					blit.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-					blit.dstSubresource().mipLevel(i);
-					blit.dstSubresource().baseArrayLayer(0);
-					blit.dstSubresource().layerCount(1);
+			for (int i = 1; i < mipLevels; i++) {
+				barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+						.newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+						.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+						.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+						.subresourceRange().baseMipLevel(i - 1);
 
-					vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blit, VK_FILTER_LINEAR);
+				vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, null, barrier);
 
-					barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-					barrier.newLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-					barrier.srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
-					barrier.dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
+				final VkImageBlit.Buffer blit = VkImageBlit.callocStack(1, stack);
 
-					vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, null, null, barrier);
+				blit.srcOffsets(0).set(0, 0, 0);
+				blit.srcOffsets(1).set(mipWidth, mipHeight, 1);
 
-					if (mipWidth > 1) {mipWidth /= 2;}
+				blit.srcSubresource()
+						.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+						.mipLevel(i - 1)
+						.baseArrayLayer(0)
+						.layerCount(1);
 
-					if (mipHeight > 1) {mipHeight /= 2;}
-				}
+				blit.dstOffsets(0).set(0, 0, 0);
+				blit.dstOffsets(1).set(mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1);
 
-				barrier.subresourceRange().baseMipLevel(mipLevels - 1);
-				barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+				blit.dstSubresource()
+						.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+						.mipLevel(i)
+						.baseArrayLayer(0)
+						.layerCount(1);
+
+				vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blit, VK_FILTER_LINEAR);
+
+				barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 				barrier.newLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+				barrier.srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
 				barrier.dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
 
 				vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, null, null, barrier);
-			}, stack);
+
+				if (mipWidth > 1) { mipWidth /= 2; }
+				if (mipHeight > 1) { mipHeight /= 2; }
+			}
+
+			barrier.oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+					.newLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+					.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+					.dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
+					.subresourceRange().baseMipLevel(mipLevels - 1);
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, null, null, barrier);
+
+			endSingleTimeCommands(commandBuffer, commandPool, queues.graphics, stack);
 		}
 	}
 
@@ -1495,7 +1509,9 @@ public class Vulkan {
 				throw new IllegalArgumentException("Unsupported layout transition");
 			}
 
-			runSingleTimeCommand((commandBuffer) -> vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, null, null, barrier), stack);
+			final VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, stack);
+			vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, null, null, barrier);
+			endSingleTimeCommands(commandBuffer, commandPool, queues.graphics, stack);
 		}
 	}
 
@@ -1633,6 +1649,7 @@ public class Vulkan {
 		public IntBuffer presentModes;
 	}
 
+	// TODO: Remove this please!
 	public static class UniformBufferObject {
 		public static final int SIZEOF = 3 * 16 * Float.BYTES;
 		public final Matrix4f model;

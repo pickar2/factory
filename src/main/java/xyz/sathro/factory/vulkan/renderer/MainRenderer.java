@@ -36,12 +36,14 @@ public class MainRenderer {
 	private static VkCommandBuffer[] primaryCommandBuffers;
 
 	public static void init() {
-		renderers.add(HouseRenderer.INSTANCE);
 		imagesInFlight = new Int2ObjectOpenHashMap<>(swapChainImages.size());
+
+		renderers.add(TestSceneRenderer.INSTANCE);
 
 		renderers.forEach(IRenderer::init);
 
 		primaryCommandBuffers = createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, swapChainImages.size(), commandPool);
+		createSyncObjects();
 	}
 
 	public static void mainLoop() {
@@ -54,7 +56,7 @@ public class MainRenderer {
 	}
 
 	private static void drawFrame() {
-		try (MemoryStack stack = stackPush()) {
+		try (final MemoryStack stack = stackPush()) {
 			final Frame currentFrame = inFlightFrames.get(currentFrameIndex);
 
 			vkWaitForFences(device, currentFrame.pFence(), true, UINT64_MAX);
@@ -76,21 +78,24 @@ public class MainRenderer {
 				vkQueueWaitIdle(queues.present.queue);
 			}
 
+			boolean dirty = false;
 			for (IRenderer renderer : renderers) {
 				renderer.beforeFrame(imageIndex);
 				if (renderer.commandBuffersChanged()) {
-					vkResetCommandPool(device, commandPool, 0);
-					for (int i = 0; i < swapChainImages.size(); i++) {
-						recordPrimaryCommandBuffers(i);
-					}
+					dirty = true;
+				}
+			}
 
-					break;
+			if (dirty) {
+				vkResetCommandPool(device, commandPool, 0);
+				for (int i = 0; i < swapChainImages.size(); i++) {
+					recordPrimaryCommandBuffers(i);
 				}
 			}
 
 			imagesInFlight.put(imageIndex, currentFrame);
 
-			VkSubmitInfo submitInfo = VkSubmitInfo.callocStack(stack)
+			final VkSubmitInfo submitInfo = VkSubmitInfo.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 					.waitSemaphoreCount(1)
 					.pWaitSemaphores(currentFrame.pImageAvailableSemaphore())
@@ -106,7 +111,7 @@ public class MainRenderer {
 				throw new RuntimeException("Failed to submit draw command buffer: " + VKReturnCode.getByCode(vkResult));
 			}
 
-			VkPresentInfoKHR presentInfo = VkPresentInfoKHR.callocStack(stack)
+			final VkPresentInfoKHR presentInfo = VkPresentInfoKHR.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
 					.pWaitSemaphores(currentFrame.pRenderFinishedSemaphore())
 					.swapchainCount(1)
@@ -135,21 +140,18 @@ public class MainRenderer {
 		renderers.forEach(IRenderer::createSwapChain);
 	}
 
-	public static void createSyncObjects() {
-		imagesInFlight.clear();
-		inFlightFrames.clear();
-
-		try (MemoryStack stack = stackPush()) {
-			VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.callocStack(stack)
+	private static void createSyncObjects() {
+		try (final MemoryStack stack = stackPush()) {
+			final VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
 
-			VkFenceCreateInfo fenceInfo = VkFenceCreateInfo.callocStack(stack)
+			final VkFenceCreateInfo fenceInfo = VkFenceCreateInfo.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO)
 					.flags(VK_FENCE_CREATE_SIGNALED_BIT);
 
-			LongBuffer pImageAvailableSemaphore = stack.mallocLong(1);
-			LongBuffer pRenderFinishedSemaphore = stack.mallocLong(1);
-			LongBuffer pFence = stack.mallocLong(1);
+			final LongBuffer pImageAvailableSemaphore = stack.mallocLong(1);
+			final LongBuffer pRenderFinishedSemaphore = stack.mallocLong(1);
+			final LongBuffer pFence = stack.mallocLong(1);
 
 			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				if (vkCreateSemaphore(device, semaphoreInfo, null, pImageAvailableSemaphore) != VK_SUCCESS || vkCreateSemaphore(device, semaphoreInfo, null, pRenderFinishedSemaphore) != VK_SUCCESS || vkCreateFence(device, fenceInfo, null, pFence) != VK_SUCCESS) {
@@ -162,10 +164,11 @@ public class MainRenderer {
 	}
 
 	public static void recordPrimaryCommandBuffers(int imageIndex) {
-		try (MemoryStack stack = stackPush()) {
-			VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+		try (final MemoryStack stack = stackPush()) {
+			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
-			VkClearValue.Buffer clearValues = VkClearValue.callocStack(2, stack);
+
+			final VkClearValue.Buffer clearValues = VkClearValue.callocStack(2, stack);
 			clearValues.get(0).color()
 					.float32(0, 100 / 255.0f)
 					.float32(1, 149 / 255.0f)
@@ -173,13 +176,14 @@ public class MainRenderer {
 					.float32(3, 1.0f);
 			clearValues.get(1).depthStencil()
 					.set(1, 0);
-			VkRect2D renderArea = VkRect2D.callocStack(stack)
+
+			final VkRect2D renderArea = VkRect2D.callocStack(stack)
 					.offset(offset -> offset.set(0, 0))
 					.extent(swapChainExtent);
 
-			VkCommandBuffer commandBuffer = primaryCommandBuffers[imageIndex];
+			final VkCommandBuffer commandBuffer = primaryCommandBuffers[imageIndex];
 
-			VkRenderPassBeginInfo renderPassInfo = VkRenderPassBeginInfo.callocStack(stack)
+			final VkRenderPassBeginInfo renderPassInfo = VkRenderPassBeginInfo.callocStack(stack)
 					.sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
 					.renderPass(renderPass)
 					.framebuffer(swapChainFramebuffers.get(imageIndex))
@@ -189,7 +193,7 @@ public class MainRenderer {
 			VkCheck(vkBeginCommandBuffer(commandBuffer, beginInfo), "Failed to begin recording command buffer");
 			vkCmdBeginRenderPass(commandBuffer, renderPassInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-			List<VkCommandBuffer> commandBuffers = new ArrayList<>();
+			final List<VkCommandBuffer> commandBuffers = new ArrayList<>();
 
 			for (IRenderer renderer : renderers) {
 				commandBuffers.addAll(Arrays.asList(renderer.getCommandBuffers(imageIndex)));
