@@ -1,5 +1,6 @@
 package xyz.sathro.factory.vulkan.renderer;
 
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -8,6 +9,7 @@ import xyz.sathro.factory.vulkan.Vulkan;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorPool;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorSet;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorSetLayout;
+import xyz.sathro.factory.vulkan.models.IUniformBufferObject;
 import xyz.sathro.factory.vulkan.models.VulkanBuffer;
 import xyz.sathro.factory.vulkan.models.VulkanImage;
 import xyz.sathro.factory.vulkan.models.VulkanPipeline;
@@ -59,7 +61,7 @@ public class HouseRenderer implements IRenderer {
 		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
 
 		for (int i = 0; i < Vulkan.swapChainImages.size(); i++) {
-			uniformBuffers[i] = Vulkan.createBuffer(Vulkan.UniformBufferObject.SIZEOF, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			uniformBuffers[i] = Vulkan.createBuffer(UBO.SIZEOF, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		}
 
 		return uniformBuffers;
@@ -134,7 +136,7 @@ public class HouseRenderer implements IRenderer {
 		try (MemoryStack stack = stackPush()) {
 			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
 					.offset(0)
-					.range(Vulkan.UniformBufferObject.SIZEOF);
+					.range(UBO.SIZEOF);
 
 			VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.callocStack(1, stack)
 					.imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
@@ -243,22 +245,18 @@ public class HouseRenderer implements IRenderer {
 
 	@Override
 	public void beforeFrame(int imageIndex) {
-		try (MemoryStack stack = stackPush()) {
-			Vulkan.UniformBufferObject ubo = new Vulkan.UniformBufferObject();
+		try (final MemoryStack stack = stackPush()) {
+			final UBO ubo = new UBO();
 
 			ubo.model.rotate((float) (glfwGetTime() * Math.toRadians(90)), 0.0f, 0.0f, 1.0f);
 			ubo.view.lookAt(2.0f, 2.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 			ubo.proj.perspective((float) Math.toRadians(45), (float) Vulkan.swapChainExtent.width() / (float) Vulkan.swapChainExtent.height(), 0.1f, 10.0f);
 			ubo.proj.m11(ubo.proj.m11() * -1);
 
-			PointerBuffer data = stack.mallocPointer(1);
+			final PointerBuffer data = stack.mallocPointer(1);
 			vmaMapMemory(Vulkan.vmaAllocator, uniformBuffers[imageIndex].allocation, data);
-			ByteBuffer buffer = data.getByteBuffer(0, Vulkan.UniformBufferObject.SIZEOF);
-			final int mat4Size = 16 * Float.BYTES;
-
-			ubo.model.get(0, buffer);
-			ubo.view.get(mat4Size, buffer);
-			ubo.proj.get(mat4Size * 2, buffer);
+			final ByteBuffer buffer = data.getByteBuffer(0, ubo.sizeof());
+			ubo.get(0, buffer);
 			vmaUnmapMemory(Vulkan.vmaAllocator, uniformBuffers[imageIndex].allocation);
 		}
 		if (dirty) {
@@ -308,5 +306,26 @@ public class HouseRenderer implements IRenderer {
 		vkDestroyCommandPool(Vulkan.device, commandPool, null);
 		vertexBuffer.dispose();
 		indexBuffer.dispose();
+	}
+
+	private static class UBO implements IUniformBufferObject {
+		public static final int SIZEOF = 3 * 16 * Float.BYTES;
+		public static final int MATRIX_OFFSET = 16 * Float.BYTES;
+
+		public final Matrix4f model = new Matrix4f();
+		public final Matrix4f view = new Matrix4f();
+		public final Matrix4f proj = new Matrix4f();
+
+		@Override
+		public int sizeof() {
+			return SIZEOF;
+		}
+
+		@Override
+		public void get(int index, ByteBuffer buffer) {
+			model.get(index, buffer);
+			view.get(index + MATRIX_OFFSET, buffer);
+			proj.get(index + MATRIX_OFFSET * 2, buffer);
+		}
 	}
 }

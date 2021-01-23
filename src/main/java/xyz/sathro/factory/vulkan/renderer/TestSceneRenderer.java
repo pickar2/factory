@@ -21,6 +21,7 @@ import xyz.sathro.factory.vulkan.descriptors.DescriptorPool;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorSet;
 import xyz.sathro.factory.vulkan.descriptors.DescriptorSetLayout;
 import xyz.sathro.factory.vulkan.models.CombinedBuffer;
+import xyz.sathro.factory.vulkan.models.IUniformBufferObject;
 import xyz.sathro.factory.vulkan.models.VulkanBuffer;
 import xyz.sathro.factory.vulkan.models.VulkanPipeline;
 import xyz.sathro.factory.vulkan.utils.VulkanPipelineBuilder;
@@ -412,8 +413,8 @@ public class TestSceneRenderer implements IRenderer {
 		octreeVertexBuffer = Vulkan.createVertexBuffer(octreeVertices);
 
 		final int mat4Size = 16 * Float.BYTES;
-		try (MemoryStack stack = stackPush()) {
-			Vulkan.UniformBufferObject ubo = new Vulkan.UniformBufferObject();
+		try (final MemoryStack stack = stackPush()) {
+			final UBO ubo = new UBO();
 
 			ubo.model.rotate((float) (glfwGetTime() * Math.toRadians(90)), 0.0f, 0.0f, 1.0f);
 			ubo.view.lookAt(12.0f, 2.0f, 12.0f, 0.0f, -25.0f, 0.0f, 0.0f, 1.0f, 0.0f).rotate((float) (glfwGetTime() * Math.toRadians(15)), 0, 1, 0);
@@ -422,7 +423,7 @@ public class TestSceneRenderer implements IRenderer {
 
 			PointerBuffer data = stack.mallocPointer(1);
 			vmaMapMemory(Vulkan.vmaAllocator, cameraUniformBuffers[imageIndex].allocation, data);
-			ByteBuffer buffer = data.getByteBuffer(0, Vulkan.UniformBufferObject.SIZEOF);
+			ByteBuffer buffer = data.getByteBuffer(0, ubo.sizeof());
 
 			ubo.view.get(0, buffer);
 			ubo.proj.get(mat4Size, buffer);
@@ -430,14 +431,14 @@ public class TestSceneRenderer implements IRenderer {
 
 			data = stack.mallocPointer(1);
 			vmaMapMemory(Vulkan.vmaAllocator, bodiesUniformBuffers[imageIndex].allocation, data);
-			buffer = data.getByteBuffer(0, Vulkan.UniformBufferObject.SIZEOF);
+			buffer = data.getByteBuffer(0, ubo.sizeof());
 
 			for (int i = 0; i < bodies.size(); i++) {
-				Body body = bodies.get(i);
+				final Body body = bodies.get(i);
 
-				Matrix4f pos = new Matrix4f().translate((float) body.pose.position.x, (float) body.pose.position.y, (float) body.pose.position.z);
-				Matrix4f rot = new Matrix4f().rotate((float) body.pose.rotation.x, (float) body.pose.rotation.y, (float) body.pose.rotation.z, (float) body.pose.rotation.w);
-				Matrix4f size = new Matrix4f().scale((float) body.size.x, (float) body.size.y, (float) body.size.z);
+				final Matrix4f pos = new Matrix4f().translate((float) body.pose.position.x, (float) body.pose.position.y, (float) body.pose.position.z);
+				final Matrix4f rot = new Matrix4f().rotate((float) body.pose.rotation.x, (float) body.pose.rotation.y, (float) body.pose.rotation.z, (float) body.pose.rotation.w);
+				final Matrix4f size = new Matrix4f().scale((float) body.size.x, (float) body.size.y, (float) body.size.z);
 				pos.mul(rot).mul(size).get(i * mat4Size, buffer);
 			}
 
@@ -505,6 +506,27 @@ public class TestSceneRenderer implements IRenderer {
 
 		for (List<VulkanBuffer> buffers : disposalQueue.values()) {
 			buffers.forEach(VulkanBuffer::dispose);
+		}
+	}
+
+	private static class UBO implements IUniformBufferObject {
+		private static final int SIZEOF = 3 * 16 * Float.BYTES;
+		private static final int MATRIX_OFFSET = 16 * Float.BYTES;
+
+		public final Matrix4f model = new Matrix4f();
+		public final Matrix4f view = new Matrix4f();
+		public final Matrix4f proj = new Matrix4f();
+
+		@Override
+		public int sizeof() {
+			return SIZEOF;
+		}
+
+		@Override
+		public void get(int index, ByteBuffer buffer) {
+			model.get(index, buffer);
+			view.get(index + MATRIX_OFFSET, buffer);
+			proj.get(index + MATRIX_OFFSET * 2, buffer);
 		}
 	}
 }

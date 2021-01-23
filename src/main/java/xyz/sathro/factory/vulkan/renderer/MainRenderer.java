@@ -38,6 +38,7 @@ public class MainRenderer {
 	public static void init() {
 		imagesInFlight = new Int2ObjectOpenHashMap<>(swapChainImages.size());
 
+		renderers.add(HouseRenderer.INSTANCE);
 		renderers.add(TestSceneRenderer.INSTANCE);
 
 		renderers.forEach(IRenderer::init);

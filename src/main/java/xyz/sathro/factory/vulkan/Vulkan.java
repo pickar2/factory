@@ -3,7 +3,6 @@ package xyz.sathro.factory.vulkan;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.joml.Matrix4f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWFramebufferSizeCallback;
 import org.lwjgl.system.MemoryStack;
@@ -1627,19 +1626,5 @@ public class Vulkan {
 		public VkSurfaceCapabilitiesKHR capabilities;
 		public VkSurfaceFormatKHR.Buffer formats;
 		public IntBuffer presentModes;
-	}
-
-	// TODO: Remove this please!
-	public static class UniformBufferObject {
-		public static final int SIZEOF = 3 * 16 * Float.BYTES;
-		public final Matrix4f model;
-		public final Matrix4f view;
-		public final Matrix4f proj;
-
-		public UniformBufferObject() {
-			model = new Matrix4f();
-			view = new Matrix4f();
-			proj = new Matrix4f();
-		}
 	}
 }
