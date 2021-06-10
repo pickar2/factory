@@ -6,10 +6,10 @@ import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import xyz.sathro.factory.collision.AABB;
 import xyz.sathro.factory.util.Maths;
-import xyz.sathro.factory.vulkan.models.Mesh;
+import xyz.sathro.vulkan.models.Mesh;
 
 public class Body implements IPhysicsEntity {
-	private static final double MAX_ROTATION_PER_SUBSTEP = 0.5f;
+	private static final double MAX_ROTATION_PER_SUBSTEP = 0.5;
 
 	@Getter public final Pose pose;
 	@Getter public final Pose prevPose;
@@ -62,8 +62,7 @@ public class Body implements IPhysicsEntity {
 			scale = MAX_ROTATION_PER_SUBSTEP / phi;
 		}
 
-		final Quaterniond dq = new Quaterniond(rot.x * scale, rot.y * scale, rot.z * scale, 0);
-		dq.mul(pose.rotation);
+		final Quaterniond dq = new Quaterniond(rot.x * scale, rot.y * scale, rot.z * scale, 0).mul(pose.rotation);
 
 		pose.rotation.set(pose.rotation.x + 0.5 * dq.x, pose.rotation.y + 0.5 * dq.y, pose.rotation.z + 0.5 * dq.z, pose.rotation.w + 0.5 * dq.w);
 		pose.rotation.normalize();
@@ -75,31 +74,22 @@ public class Body implements IPhysicsEntity {
 
 	public void integrate(double dt, Vector3d gravity) {
 		prevPose.set(pose);
-		velocity.add(new Vector3d(gravity).mul(dt));
-		pose.position.add(new Vector3d(velocity).mul(dt));
+		velocity.fma(dt, gravity);
+		pose.position.fma(dt, velocity);
 		applyRotation(angularVelocity, dt);
 	}
 
-	public void update(double dt) {
-		velocity.set(pose.position).sub(prevPose.position);
-		velocity.mul(1 / dt);
-		final Quaterniond dq = new Quaterniond();
-		dq.set(new Quaterniond(pose.rotation).mul(new Quaterniond(prevPose.rotation).conjugate()));
-		angularVelocity.set(dq.x * 2.0 / dt, dq.y * 2.0 / dt, dq.z * 2.0 / dt);
+	public void update(double invDt) {
+		velocity.set(pose.position).sub(prevPose.position).mul(invDt);
+		final Quaterniond dq = new Quaterniond(prevPose.rotation).conjugate().premul(pose.rotation);
+		angularVelocity.set(dq.x * 2.0 * invDt, dq.y * 2.0 * invDt, dq.z * 2.0 * invDt);
 		if (dq.w < 0) {
 			angularVelocity.mul(-1);
 		}
-
-//         this.omega.mul(1.0f - 1.0f * dt);
-//         this.velocity.mul(1.0f - 1.0f * dt);
-//
-//        this.mesh.position.copy(this.pose.p);
-//        this.mesh.quaternion.copy(this.pose.q);
 	}
 
 	public Vector3d getVelocityAt(Vector3d pos) {
-		final Vector3d velocity = new Vector3d();
-		pos.sub(pose.position, velocity);
+		final Vector3d velocity = new Vector3d(pos).sub(pose.position);
 		velocity.cross(angularVelocity);
 		this.velocity.sub(velocity, velocity);
 
@@ -108,23 +98,18 @@ public class Body implements IPhysicsEntity {
 
 	public double getInverseMass(Vector3d normal, Vector3d pos) {
 		if (pos == null) {
-			return getInverseMass(normal); // TODO: remove this ?
+			return getInverseMass(normal);
 		}
-		final Vector3d n = new Vector3d();
-
-		pos.sub(pose.position, n);
-		n.cross(normal);
-		pose.invRotate(n);
+		final Vector3d n = pose.invRotateVector(new Vector3d(pos).sub(pose.position).cross(normal));
 
 		return n.x * n.x * invInertia.x +
 		       n.y * n.y * invInertia.y +
-		       n.z * n.z * invInertia.z + invMass;
+		       n.z * n.z * invInertia.z +
+		       invMass;
 	}
 
 	public double getInverseMass(Vector3d normal) {
-		final Vector3d n = new Vector3d(normal);
-
-		pose.invRotate(n);
+		final Vector3d n = pose.invRotateVector(new Vector3d(normal));
 
 		return n.x * n.x * invInertia.x +
 		       n.y * n.y * invInertia.y +
@@ -132,22 +117,21 @@ public class Body implements IPhysicsEntity {
 	}
 
 	public void applyCorrection(Vector3d corr, Vector3d pos, boolean velocityLevel) {
-		Vector3d dq = new Vector3d();
+		final Vector3d dq;
 		if (pos == null) {
 			dq = new Vector3d(corr);
 		} else {
 			if (velocityLevel) {
-				velocity.add(new Vector3d(corr).mul(invMass));
+				velocity.fma(invMass, corr);
 			} else {
-				pose.position.add(new Vector3d(corr).mul(invMass));
+				pose.position.fma(invMass, corr);
 			}
-			pos.sub(pose.position, dq);
-			dq.cross(corr);
+			dq = new Vector3d(pos).sub(pose.position).cross(corr);
 		}
 
-		pose.invRotate(dq);
-		dq.set(this.invInertia.x * dq.x, this.invInertia.y * dq.y, this.invInertia.z * dq.z);
-		pose.rotate(dq);
+		pose.invRotateVector(dq);
+		dq.mul(invInertia);
+		pose.rotateVector(dq);
 
 		if (velocityLevel) {
 			angularVelocity.add(dq);
@@ -158,7 +142,7 @@ public class Body implements IPhysicsEntity {
 
 	@Override
 	public AABB getAABB() {
-		return new AABB(new Vector3d(size).div(2).negate(), new Vector3d(size).div(2));
+		return new AABB(new Vector3d(size).mul(-0.5), new Vector3d(size).mul(0.5));
 	}
 
 	@Override

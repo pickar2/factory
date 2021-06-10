@@ -1,6 +1,8 @@
 package xyz.sathro.factory.physics;
 
 import lombok.ToString;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 import org.joml.Quaterniond;
 import org.joml.Vector3d;
 
@@ -19,36 +21,50 @@ public class Pose {
 		this.rotation = rotation;
 	}
 
+	@Contract(mutates = "this")
 	public void set(Pose other) {
 		position.set(other.position);
 		rotation.set(other.rotation);
 	}
 
-	public void rotate(Vector3d v) {
-		v.rotate(rotation);
+	@Contract(mutates = "this")
+	public @NotNull Pose rotate(@NotNull Quaterniond rotation) {
+		rotation.transform(this.position);
+		return this;
 	}
 
-	public void invRotate(Vector3d v) {
-		Quaterniond inv = new Quaterniond(rotation).conjugate();
-		v.rotate(inv);
+	@Contract(mutates = "this")
+	public @NotNull Pose invRotate(@NotNull Quaterniond rotation) {
+		rotation.transformInverse(this.position);
+		return this;
 	}
 
-	public void transform(Vector3d v) {
-		v.rotate(rotation);
-		v.add(position);
+	@Contract(mutates = "param")
+	public @NotNull Vector3d rotateVector(@NotNull Vector3d vector) {
+		rotation.transform(vector);
+		return vector;
 	}
 
-	public void invTransform(Vector3d v) {
-		v.sub(position);
-		invRotate(v);
+	@Contract(mutates = "param")
+	public @NotNull Vector3d invRotateVector(@NotNull Vector3d vector) {
+		rotation.transformInverse(vector);
+		return vector;
 	}
 
-	public void transformPose(Pose pose) {
-		pose.rotation.set(new Quaterniond(this.rotation).mul(pose.rotation));
-		rotate(pose.position);
-		pose.position.add(position);
+	/**
+	 * Applies other pose's rotation to this rotation, rotates this pose around other rotation, and moves this pose according to other pose.
+	 */
+	@Contract(mutates = "this")
+	public @NotNull Pose transform(@NotNull Pose other) {
+		this.rotation.premul(other.rotation);
+		this.rotate(other.rotation);
+		this.position.add(other.position);
+
+		return this;
 	}
 
+	@Override
+	@SuppressWarnings("MethodDoesntCallSuperMethod")
 	public Pose clone() {
 		return new Pose(new Vector3d(position), new Quaterniond(rotation));
 	}

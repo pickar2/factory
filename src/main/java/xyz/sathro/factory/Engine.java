@@ -6,9 +6,15 @@ package xyz.sathro.factory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.system.Configuration;
-import xyz.sathro.factory.vulkan.Vulkan;
+import xyz.sathro.factory.vulkan.renderers.HouseRenderer;
+import xyz.sathro.factory.vulkan.renderers.UIRenderer;
+import xyz.sathro.factory.window.MouseInput;
+import xyz.sathro.factory.window.Window;
+import xyz.sathro.vulkan.Vulkan;
+import xyz.sathro.vulkan.renderer.MainRenderer;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.concurrent.ConcurrentMap;
 
 public class Engine {
@@ -24,15 +30,23 @@ public class Engine {
 		}
 
 		if (debugMode) {
+			logger.info("ENABLED DEBUG MODE");
+
 			Configuration.DEBUG_MEMORY_ALLOCATOR.set(true);
 			Configuration.DEBUG_STACK.set(true);
 		}
 
 		try {
-			Vulkan.run();
+			Window.init();
+			MouseInput.init();
+			Vulkan.initVulkan(List.of(HouseRenderer.INSTANCE, UIRenderer.INSTANCE));
+			MainRenderer.mainLoop();
+			Vulkan.cleanup();
+			MouseInput.cleanup();
+			Window.cleanup();
 		} catch (Throwable e) {
 			if (debugMode) {
-				// hack to turn off memory leaks print if exception was caught, because they are useless in this scenario
+				// hack to turn off memory leaks print if exception was caught, because they are useless in that scenario
 				final Class<?> debugAllocator = Class.forName("org.lwjgl.system.MemoryManage$DebugAllocator");
 				final Field allocations = debugAllocator.getDeclaredField("ALLOCATIONS");
 				allocations.setAccessible(true);

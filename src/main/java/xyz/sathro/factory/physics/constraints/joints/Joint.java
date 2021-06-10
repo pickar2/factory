@@ -35,11 +35,11 @@ public abstract class Joint extends Constraint {
 	public void updateGlobalPoses() {
 		globalPose0.set(localPose0);
 		if (body0 != null) {
-			body0.pose.transformPose(globalPose0);
+			globalPose0.transform(body0.pose);
 		}
 		globalPose1.set(localPose1);
 		if (body1 != null) {
-			body1.pose.transformPose(globalPose1);
+			globalPose1.transform(body1.pose);
 		}
 	}
 
@@ -50,8 +50,8 @@ public abstract class Joint extends Constraint {
 		solvePosition(dt);
 
 		updateGlobalPoses();
-		final Vector3d corr = new Vector3d();
-		globalPose1.position.sub(globalPose0.position, corr);
+
+		final Vector3d corr = new Vector3d(globalPose1.position).sub(globalPose0.position);
 		applyBodyPairCorrection(this.body0, this.body1, corr, this.compliance, dt, this.globalPose0.position, this.globalPose1.position, false);
 	}
 

@@ -11,8 +11,7 @@ public class XPBD {
 		double C = corr.length();
 		if (C == 0) { return; }
 
-		Vector3d normal = new Vector3d(corr);
-		normal.normalize();
+		final Vector3d normal = new Vector3d(corr).normalize();
 
 		double w0 = body0 != null ? body0.getInverseMass(normal, pos0) : 0;
 		double w1 = body1 != null ? body1.getInverseMass(normal, pos1) : 0;
@@ -92,7 +91,8 @@ public class XPBD {
 	}
 
 	public static void simulate(List<Body> bodies, List<Constraint> constraints, double timeStep, int numSubsteps, Vector3d gravity) {
-		double dt = timeStep / numSubsteps;
+		final double dt = timeStep / numSubsteps;
+		final double invDt = 1 / dt;
 
 		for (int i = 0; i < numSubsteps; i++) {
 			for (Body body : bodies) {
@@ -104,7 +104,7 @@ public class XPBD {
 			}
 
 			for (Body body : bodies) {
-				body.update(dt);
+				body.update(invDt);
 			}
 
 			for (Constraint constraint : constraints) {

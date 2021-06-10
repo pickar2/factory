@@ -65,4 +65,12 @@ public class Maths {
 	public static Matrix3d diagonalFromVector(Vector3d vector) {
 		return new Matrix3d(vector.x, 0, 0, 0, vector.y, 0, 0, 0, vector.z);
 	}
+
+	public static int asTwoInt16(int left, int right) {
+		return ((left << 16) & 0xFFFF0000) | (right & 0x0000FFFF);
+	}
+
+	public static int ceilDiv(double a, double b) {
+		return (int) Math.ceil(a / b);
+	}
 }

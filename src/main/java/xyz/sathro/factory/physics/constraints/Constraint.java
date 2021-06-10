@@ -13,7 +13,7 @@ public abstract class Constraint {
 		this.body1 = body1;
 	}
 
-	public abstract void solveVel(double dt);
-
 	public abstract void solvePos(double dt);
+
+	public abstract void solveVel(double dt);
 }
