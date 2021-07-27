@@ -19,6 +19,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Collections;
 
+@SuppressWarnings({ "unchecked", "rawtypes" })
 public final class EventManager {
 	private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 	private static final MethodType EVENT_CONSUMER_TYPE = MethodType.methodType(void.class, Event.class);
@@ -95,6 +96,14 @@ public final class EventManager {
 		}
 	}
 
+	public static <E extends Event> void registerMethodDirect(final Class<E> eventClass, final EventConsumer<E> consumer, final ListenerPriority priority) {
+		addListener(eventClass, new Listener<>(EventManager.class, consumer, priority));
+	}
+
+	public static <E extends Event> void registerGenericMethodDirect(final Class<E> eventClass, final Class<?> genericType, final EventConsumer<E> consumer, final ListenerPriority priority) {
+		addGenericListener(eventClass, genericType, new Listener<>(EventManager.class, consumer, priority));
+	}
+
 	private static void addListener(final Type eventType, final Listener listener) {
 		final ObjectList<Listener> list = REGISTERED_LISTENERS.computeIfAbsent(eventType, k -> ObjectLists.synchronize(new ObjectArrayList<>()));
 		binaryInsert(list, listener);
@@ -126,7 +135,6 @@ public final class EventManager {
 		}
 	}
 
-	@SuppressWarnings("rawtypes")
 	public static void unregisterListenersOfGenericEvent(final Class<? extends GenericEvent> eventClass, final Type genericType) {
 		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.get(eventClass);
 		if (map != null) {
@@ -137,7 +145,6 @@ public final class EventManager {
 		}
 	}
 
-	@SuppressWarnings("rawtypes")
 	public static void unregisterAllListenersOfGenericEvent(final Class<? extends GenericEvent> eventClass) {
 		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.get(eventClass);
 		if (map != null) {
@@ -184,9 +191,9 @@ public final class EventManager {
 
 	@ToString
 	@AllArgsConstructor
-	public static class Listener implements Comparable<Listener> {
+	public static class Listener<E extends Event> implements Comparable<Listener<E>> {
 		public final Object caller;
-		public final EventConsumer consumer;
+		public final EventConsumer<E> consumer;
 		public final ListenerPriority priority;
 
 		@Override
@@ -195,7 +202,7 @@ public final class EventManager {
 		}
 	}
 
-	public interface EventConsumer {
-		void accept(Event event);
+	public interface EventConsumer<E extends Event> {
+		void accept(E event);
 	}
 }

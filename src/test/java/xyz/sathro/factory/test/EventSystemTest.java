@@ -41,7 +41,7 @@ public class EventSystemTest {
 	@Test
 	public void testGenericEvents() {
 		final GenericTestEvent<Object> testEventObject = new GenericTestEvent<>(Object.class, 2);
-		final GenericTestEvent<Object> testEventEvent = new GenericTestEvent<>(Event.class, 7);
+		final GenericTestEvent<Event> testEventEvent = new GenericTestEvent<>(Event.class, 7);
 
 		EventManager.callEvent(testEventObject);
 		EventManager.callEvent(testEventEvent);
@@ -49,6 +49,21 @@ public class EventSystemTest {
 		assertEquals(IntList.of(2, 6), testEventObject.dataStorage);
 		assertEquals(IntList.of(7, 0), testEventEvent.dataStorage);
 		assertEquals(11, EventManager.getAllRegisteredListeners().stream().mapToInt(l -> l.priority.ordinal()).reduce(Integer::sum).orElse(-1));
+	}
+
+	@Test
+	public void testDirectEvent() {
+		final TestEvent2 testEvent = new TestEvent2(42);
+
+		EventManager.registerMethodDirect(TestEvent2.class, (e) -> e.addData(12), ListenerPriority.LOWEST);
+		EventManager.registerMethodDirect(TestEvent2.class, (e) -> e.addData(52), ListenerPriority.HIGHEST);
+
+		EventManager.callEvent(testEvent);
+
+		assertEquals(IntList.of(42, 52, 12), testEvent.dataStorage);
+		assertEquals(15, EventManager.getAllRegisteredListeners().stream().mapToInt(l -> l.priority.ordinal()).reduce(Integer::sum).orElse(-1));
+
+		EventManager.unregisterListenersOfEvent(TestEvent2.class);
 	}
 
 	@Test
@@ -78,6 +93,18 @@ public class EventSystemTest {
 		private final IntList dataStorage = new IntArrayList();
 
 		public TestEvent(int data) {
+			addData(data);
+		}
+
+		public void addData(int data) {
+			dataStorage.add(data);
+		}
+	}
+
+	public static class TestEvent2 extends Event {
+		private final IntList dataStorage = new IntArrayList();
+
+		public TestEvent2(int data) {
 			addData(data);
 		}
 
