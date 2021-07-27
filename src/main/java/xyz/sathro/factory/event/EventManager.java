@@ -1,164 +1,201 @@
 package xyz.sathro.factory.event;
 
 import it.unimi.dsi.fastutil.objects.*;
+import lombok.AllArgsConstructor;
+import lombok.ToString;
+import org.jetbrains.annotations.NotNull;
 import xyz.sathro.factory.event.annotations.SubscribeEvent;
 import xyz.sathro.factory.event.events.Event;
 import xyz.sathro.factory.event.events.GenericEvent;
-import xyz.sathro.factory.event.exceptions.EventDispatchException;
 import xyz.sathro.factory.event.listeners.ListenerPriority;
-import xyz.sathro.factory.logger.Logger;
 
-import java.lang.reflect.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.Collections;
 
 public final class EventManager {
-	private static final Object2ObjectMap<Type, ObjectList<Listener>> registeredListeners = Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
+	private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
+	private static final MethodType EVENT_CONSUMER_TYPE = MethodType.methodType(void.class, Event.class);
+	private static final MethodType STATIC_INVOKE_TYPE = MethodType.methodType(EventConsumer.class);
 
-	private static final Object2ObjectMap<Type, Object2ObjectMap<Type, ObjectList<Listener>>> registeredGenericListeners = Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
+	private static final Object2ObjectMap<Type, ObjectList<Listener>> REGISTERED_LISTENERS = Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
+	private static final Object2ObjectMap<Type, Object2ObjectMap<Type, ObjectList<Listener>>> REGISTERED_GENERIC_LISTENERS = Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
 
-	private EventManager() {
+	private EventManager() { }
+
+	private static <E extends Comparable<E>> void binaryInsert(final ObjectList<E> list, final E element) {
+		int position = Collections.binarySearch(list, element);
+		if (position < 0) {
+			position = -(position + 1);
+		}
+		list.add(position, element);
 	}
 
-	public static void registerListeners(final Object listenerClassInstance) {
+	private static EventConsumer getConsumer(final Method method, final Object caller) {
+		try {
+			final MethodHandle mh = LOOKUP.unreflect(method);
+			final MethodType mhType = MethodType.methodType(void.class, mh.type().parameterType(1));
+
+			return (EventConsumer) LambdaMetafactory.metafactory(LOOKUP, "accept", STATIC_INVOKE_TYPE.appendParameterTypes(caller.getClass()), EVENT_CONSUMER_TYPE, mh, mhType).getTarget().invoke(caller);
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static EventConsumer getStaticConsumer(final Method method) {
+		try {
+			final MethodHandle mh = LOOKUP.unreflect(method);
+			final MethodType mhType = MethodType.methodType(void.class, mh.type().parameterType(0));
+
+			return (EventConsumer) LambdaMetafactory.metafactory(LOOKUP, "accept", STATIC_INVOKE_TYPE, EVENT_CONSUMER_TYPE, mh, mhType).getTarget().invokeExact();
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	public static void registerListeners(final Object caller) {
 		final Method[] methods;
 		boolean isStatic = false;
 
-		if (listenerClassInstance instanceof Class) {
+		if (caller instanceof Class) {
 			isStatic = true;
-			methods = ((Class<?>) listenerClassInstance).getMethods();
+			methods = ((Class<?>) caller).getMethods();
 		} else {
-			methods = listenerClassInstance.getClass().getMethods();
+			methods = caller.getClass().getMethods();
 		}
 		for (Method method : methods) {
 			if (Modifier.isStatic(method.getModifiers()) != isStatic) {
 				continue;
 			}
 
-			if (!method.isAnnotationPresent(SubscribeEvent.class)) {
-				continue;
-			}
+			registerMethod(method, caller, isStatic);
+		}
+	}
 
-			if (method.getParameterCount() != 1) {
-				Logger.instance.error("Ignoring illegal event handler: " + method.getName() + ": Wrong number of arguments (required: 1)");
-				continue;
-			}
+	public static void registerMethod(final Method method, final Object caller, final boolean isStatic) {
+		if (!method.isAnnotationPresent(SubscribeEvent.class)) { return; }
+		if (method.getParameterCount() != 1) { return; }
+		if (!Event.class.isAssignableFrom(method.getParameterTypes()[0])) { return; }
 
-			if (!Event.class.isAssignableFrom(method.getParameterTypes()[0])) {
-				Logger.instance.error("Ignoring illegal event handler: " + method.getName() + ": Argument must extend " + Event.class.getName());
-				continue;
-			}
+		final ListenerPriority priority = method.getAnnotation(SubscribeEvent.class).priority();
+		final Listener listener = new Listener(caller, isStatic ? getStaticConsumer(method) : getConsumer(method, caller), priority);
 
-			ListenerPriority priority = method.getAnnotation(SubscribeEvent.class).priority();
-			Listener listener = new Listener(listenerClassInstance, method, priority);
-
-			Type eventType = method.getParameterTypes()[0];
-			if (!method.getGenericParameterTypes()[0].equals(eventType)) {
-				addGenericListener(eventType, ((ParameterizedType) method.getGenericParameterTypes()[0]).getActualTypeArguments()[0], listener);
-			} else {
-				addListener(eventType, listener);
-			}
+		final Type eventType = method.getParameterTypes()[0];
+		final Type parameterType = method.getGenericParameterTypes()[0];
+		if (!parameterType.equals(eventType)) {
+			addGenericListener(eventType, ((ParameterizedType) parameterType).getActualTypeArguments()[0], listener);
+		} else {
+			addListener(eventType, listener);
 		}
 	}
 
 	private static void addListener(final Type eventType, final Listener listener) {
-		if (!registeredListeners.containsKey(eventType)) {
-			registeredListeners.put(eventType, ObjectLists.synchronize(new ObjectArrayList<>()));
-		}
-
-		registeredListeners.get(eventType).add(listener);
+		final ObjectList<Listener> list = REGISTERED_LISTENERS.computeIfAbsent(eventType, k -> ObjectLists.synchronize(new ObjectArrayList<>()));
+		binaryInsert(list, listener);
 	}
 
 	private static void addGenericListener(final Type eventType, final Type genericType, final Listener listener) {
-		if (!registeredGenericListeners.containsKey(eventType)) {
-			registeredGenericListeners.put(eventType, Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>()));
-		}
-		Object2ObjectMap<Type, ObjectList<Listener>> map = registeredGenericListeners.get(eventType);
-		if (!map.containsKey(genericType)) {
-			map.put(genericType, ObjectLists.synchronize(new ObjectArrayList<>()));
-		}
-		map.get(genericType).add(listener);
+		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.computeIfAbsent(eventType, k -> Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>()));
+		final ObjectList<Listener> list = map.computeIfAbsent(genericType, k -> ObjectLists.synchronize(new ObjectArrayList<>()));
+
+		binaryInsert(list, listener);
 	}
 
-	public static void unregisterListeners(final Object listenerClassInstance) {
-		for (ObjectList<Listener> listenerList : registeredListeners.values()) {
-			for (int i = 0; i < listenerList.size(); i++) {
-				if (listenerList.get(i).listenerClassInstance == listenerClassInstance) {
-					listenerList.remove(i);
-					i -= 1;
-				}
+	public static void unregisterListeners(final Object caller) {
+		for (ObjectList<Listener> list : REGISTERED_LISTENERS.values()) {
+			list.removeIf(listener -> listener.caller == caller);
+		}
+
+		for (Object2ObjectMap<Type, ObjectList<Listener>> map : REGISTERED_GENERIC_LISTENERS.values()) {
+			for (ObjectList<Listener> list : map.values()) {
+				list.removeIf(listener -> listener.caller == caller);
 			}
 		}
 	}
 
 	public static void unregisterListenersOfEvent(final Class<? extends Event> eventClass) {
-		registeredListeners.get(eventClass).clear();
+		final ObjectList<Listener> listeners = REGISTERED_LISTENERS.get(eventClass);
+		if (listeners != null) {
+			listeners.clear();
+		}
+	}
+
+	@SuppressWarnings("rawtypes")
+	public static void unregisterListenersOfGenericEvent(final Class<? extends GenericEvent> eventClass, final Type genericType) {
+		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.get(eventClass);
+		if (map != null) {
+			final ObjectList<Listener> listeners = map.get(genericType);
+			if (listeners != null) {
+				listeners.clear();
+			}
+		}
+	}
+
+	@SuppressWarnings("rawtypes")
+	public static void unregisterAllListenersOfGenericEvent(final Class<? extends GenericEvent> eventClass) {
+		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.get(eventClass);
+		if (map != null) {
+			map.values().forEach(ObjectList::clear);
+		}
 	}
 
 	public static void callEvent(final Event event) {
-		for (ListenerPriority priority : ListenerPriority.values()) {
-			if (event.isCancelled()) {
-				break;
-			}
-			dispatchEvent(event, priority);
+		if (event.isCancelled()) { return; }
+
+		final ObjectList<Listener> listeners = REGISTERED_LISTENERS.getOrDefault(event.getClass(), ObjectLists.emptyList());
+		for (Listener listener : listeners) {
+			if (event.isCancelled()) { return; }
+
+			listener.consumer.accept(event);
 		}
 	}
 
-	private static void dispatchEvent(final Event event, final ListenerPriority priority) {
-		ObjectList<Listener> listeners = null;
-		if (event instanceof GenericEvent) {
-			Object2ObjectMap<Type, ObjectList<Listener>> map = registeredGenericListeners.get(event.getClass());
-			if (map != null) {
-				listeners = map.get(((GenericEvent) event).getType());
-			}
-		} else {
-			listeners = registeredListeners.get(event.getClass());
-		}
-		if (listeners != null) {
-			for (Listener listener : listeners) {
-				if (event.isCancelled()) {
-					break;
-				}
-				if (listener.priority == priority) {
-					try {
-						listener.listenerMethod.setAccessible(true);
-						listener.listenerMethod.invoke(listener.listenerClassInstance, event);
-					} catch (IllegalAccessException e) {
-						Logger.instance.error("Could not access event handler method:");
-						Logger.instance.error(Arrays.toString(e.getStackTrace()));
-					} catch (InvocationTargetException e) {
-						throw new EventDispatchException("Could not dispatch event to handler " + listener.listenerMethod.getName(), e);
-					}
+	public static void callEvent(final GenericEvent<?> event) {
+		if (event.isCancelled()) { return; }
+
+		final Object2ObjectMap<Type, ObjectList<Listener>> map = REGISTERED_GENERIC_LISTENERS.get(event.getClass());
+		if (map != null) {
+			final ObjectList<Listener> listeners = map.get(event.getType());
+
+			if (listeners != null) {
+				for (Listener listener : listeners) {
+					if (event.isCancelled()) { return; }
+
+					listener.consumer.accept(event);
 				}
 			}
 		}
 	}
 
-	public static List<Listener> getRegisteredListeners() {
-		List<Listener> ret = new ArrayList<>();
-		registeredListeners.forEach((aClass, listeners) -> ret.addAll(listeners));
+	public static ObjectList<Listener> getAllRegisteredListeners() {
+		final ObjectList<Listener> ret = new ObjectArrayList<>();
+
+		REGISTERED_LISTENERS.values().forEach(ret::addAll);
+		REGISTERED_GENERIC_LISTENERS.values().forEach(map -> map.values().forEach(ret::addAll));
+
 		return ret;
 	}
 
-	public static class Listener {
-		private final Object listenerClassInstance;
-		private final Method listenerMethod;
-		private final ListenerPriority priority;
-
-		private Listener(final Object listenerClassInstance, final Method listenerMethod, final ListenerPriority priority) {
-			this.listenerClassInstance = listenerClassInstance;
-			this.listenerMethod = listenerMethod;
-			this.priority = priority;
-		}
+	@ToString
+	@AllArgsConstructor
+	public static class Listener implements Comparable<Listener> {
+		public final Object caller;
+		public final EventConsumer consumer;
+		public final ListenerPriority priority;
 
 		@Override
-		public String toString() {
-			return "Listener{" +
-			       "listenerClassInstance=" + listenerClassInstance +
-			       ", listenerMethod=" + listenerMethod +
-			       ", priority=" + priority +
-			       '}';
+		public int compareTo(@NotNull EventManager.Listener o) {
+			return priority.compareTo(o.priority);
 		}
+	}
+
+	public interface EventConsumer {
+		void accept(Event event);
 	}
 }
