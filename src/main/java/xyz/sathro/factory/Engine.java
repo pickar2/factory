@@ -7,7 +7,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.system.Configuration;
 import xyz.sathro.factory.vulkan.renderers.HouseRenderer;
-import xyz.sathro.factory.vulkan.renderers.UIRenderer;
 import xyz.sathro.factory.window.MouseInput;
 import xyz.sathro.factory.window.Window;
 import xyz.sathro.vulkan.Vulkan;
@@ -19,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 
 public class Engine {
 	private static final Logger logger = LogManager.getLogger(Engine.class);
-	public static boolean debugMode = true;
+	public static boolean debugMode = false;
 
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException, ClassNotFoundException {
@@ -39,8 +38,9 @@ public class Engine {
 		try {
 			Window.init();
 			MouseInput.init();
-			Vulkan.initVulkan(List.of(HouseRenderer.INSTANCE, UIRenderer.INSTANCE));
+			Vulkan.initVulkan(List.of(HouseRenderer.INSTANCE));
 			MainRenderer.mainLoop();
+
 			Vulkan.cleanup();
 			MouseInput.cleanup();
 			Window.cleanup();

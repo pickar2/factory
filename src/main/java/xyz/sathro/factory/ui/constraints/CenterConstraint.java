@@ -1,6 +1,6 @@
 package xyz.sathro.factory.ui.constraints;
 
-import xyz.sathro.factory.ui.components.UIComponent;
+import xyz.sathro.factory.ui.components.BasicUIComponent;
 
 public class CenterConstraint implements UIConstraint {
 	private final Alignment alignment;
@@ -10,9 +10,9 @@ public class CenterConstraint implements UIConstraint {
 	}
 
 	@Override
-	public void apply(UIComponent component) {
+	public void apply(BasicUIComponent component) {
 		if (component.getParent() != null) {
-			final UIComponent parent = component.getParent();
+			final BasicUIComponent parent = component.getParent();
 			if (alignment == Alignment.HORIZONTAL || alignment == Alignment.BOTH) {
 				component.position.x = parent.position.x + (parent.size.x - component.size.x) / 2;
 			}

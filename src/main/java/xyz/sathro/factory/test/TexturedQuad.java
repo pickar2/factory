@@ -10,7 +10,7 @@ import org.joml.Vector3i;
 @AllArgsConstructor
 @ToString
 public class TexturedQuad {
-	public static final int MAX_POS = 1 << 15;
+	public static final int MAX_POS = 1 << (BlockModelContainer.MAX_DEEPNESS + 1);
 	public static final int MAX_POS_MINUS_ONE = MAX_POS - 1;
 
 	@Getter private final Side side;
@@ -41,11 +41,6 @@ public class TexturedQuad {
 		this.textureSize = new Vector2i(quad.textureSize);
 	}
 
-	@FunctionalInterface
-	public interface CompatibilityFunction {
-		boolean check(TexturedQuad first, TexturedQuad second);
-	}
-
 	public boolean compatible(TexturedQuad other) {
 		if (side != other.side) { return false; }
 		if (pos.get(side.d) != other.pos.get(side.d)) { return false; }
@@ -58,15 +53,15 @@ public class TexturedQuad {
 			ret = MeshSide.X_INC;
 		}
 		if (pos.get(side.textureX) == other.pos.get(side.textureX) + other.size.x && texturePos.x == ((other.texturePos.x + other.textureSize.x) & MAX_POS_MINUS_ONE)) {
-			if (ret != MeshSide.NONE) return MeshSide.NONE;
+			if (ret != MeshSide.NONE) { return MeshSide.NONE; }
 			ret = MeshSide.X_DEC;
 		}
 		if (pos.get(side.textureY) + size.y == other.pos.get(side.textureY) && ((texturePos.y + textureSize.y) & MAX_POS_MINUS_ONE) == other.texturePos.y) {
-			if (ret != MeshSide.NONE) return MeshSide.NONE;
+			if (ret != MeshSide.NONE) { return MeshSide.NONE; }
 			ret = MeshSide.Y_INC;
 		}
 		if (pos.get(side.textureY) == other.pos.get(side.textureY) + other.size.y && texturePos.y == ((other.texturePos.y + other.textureSize.y) & MAX_POS_MINUS_ONE)) {
-			if (ret != MeshSide.NONE) return MeshSide.NONE;
+			if (ret != MeshSide.NONE) { return MeshSide.NONE; }
 			ret = MeshSide.Y_DEC;
 		}
 
@@ -109,10 +104,10 @@ public class TexturedQuad {
 
 	public boolean isOuter(int[] offset, int[] maxQuadStart, int[] maxQuadEnd) {
 		// TODO: is `pos.get(side.textureX) == maxQuadStart[side.textureX]` even valid check?
-		if (pos.get(side.textureX) == offset[side.textureX] || pos.get(side.textureX) == maxQuadStart[side.textureX]) {
+		if (pos.get(side.textureX) == offset[side.textureX]) {
 			return true;
 		}
-		if (pos.get(side.textureY) == offset[side.textureY] || pos.get(side.textureY) == maxQuadStart[side.textureY]) {
+		if (pos.get(side.textureY) == offset[side.textureY]) {
 			return true;
 		}
 
@@ -143,5 +138,10 @@ public class TexturedQuad {
 
 	public enum RemoveMask {
 		NONE, FIRST, SECOND, BOTH
+	}
+
+	@FunctionalInterface
+	public interface CompatibilityFunction {
+		boolean check(TexturedQuad first, TexturedQuad second);
 	}
 }

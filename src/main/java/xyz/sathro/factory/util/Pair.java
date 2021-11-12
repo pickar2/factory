@@ -3,7 +3,8 @@ package xyz.sathro.factory.util;
 import lombok.*;
 
 @AllArgsConstructor(staticName = "of")
-@Getter @Setter
+@Getter
+@Setter
 @ToString
 @EqualsAndHashCode
 public class Pair<K, V> {

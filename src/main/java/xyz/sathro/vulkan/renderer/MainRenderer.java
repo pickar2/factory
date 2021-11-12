@@ -8,9 +8,12 @@ import org.lwjgl.glfw.GLFW;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
+import xyz.sathro.factory.util.Timer;
 import xyz.sathro.factory.window.MouseInput;
 import xyz.sathro.factory.window.Window;
+import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.models.Frame;
+import xyz.sathro.vulkan.utils.CommandBuffers;
 import xyz.sathro.vulkan.utils.DisposalQueue;
 import xyz.sathro.vulkan.utils.VKReturnCode;
 
@@ -28,6 +31,10 @@ import static xyz.sathro.vulkan.utils.BufferUtils.asPointerBuffer;
 import static xyz.sathro.vulkan.utils.VulkanUtils.VkCheck;
 
 public class MainRenderer {
+	public static final int UPDATES_PER_SECOND = 60;
+	public static final double MS_PER_UPDATE = 1000.0 / UPDATES_PER_SECOND;
+	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
+
 	public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
 	private static final List<Frame> inFlightFrames = new ObjectArrayList<>(MAX_FRAMES_IN_FLIGHT);
@@ -36,30 +43,46 @@ public class MainRenderer {
 	private static Int2ObjectMap<Frame> imagesInFlight;
 	@Getter private static int currentFrameIndex;
 	private static VkCommandBuffer[] primaryCommandBuffers;
+	public static boolean framebufferResize = false;
 
 	public static void init(List<IRenderer> newRenderers) {
-		imagesInFlight = new Int2ObjectOpenHashMap<>(swapChainImages.size());
+		imagesInFlight = new Int2ObjectOpenHashMap<>(Vulkan.swapChainImageCount);
 
 		renderers.addAll(newRenderers);
 		renderers.forEach(IRenderer::init);
 
-		primaryCommandBuffers = createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, swapChainImages.size(), commandPool);
+//		VulkanCompute.mandelbrot();
+
+		primaryCommandBuffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, Vulkan.swapChainImageCount, commandPool);
 		createSyncObjects();
 	}
 
 	public static void mainLoop() {
+		double lag = 0.0;
+		final Timer timer = new Timer();
+
 		while (!Window.shouldClose) {
 			Window.update();
 			GLFW.glfwPollEvents();
 			MouseInput.input();
 
-			drawFrame();
+			lag += timer.getElapsedTime();
+			if (lag >= MS_PER_UPDATE) {
+				drawFrame(lag * MS_PER_UPDATE_INV);
+				lag = 0;
+			}
 		}
 
 		vkDeviceWaitIdle(device);
 	}
 
-	private static void drawFrame() {
+	// TODO: next frame can start writing commands before this frame finishes being presented ?
+	// TODO: renderers (beforeFrame, writeCommandBuffers, afterFrame) can, and should, be processed by multiple threads
+	// TODO: vkQueueSubmits must be limited/batched (record all required transfers and do them all in one pass?)
+	// TODO: big renderers can split work into multiple commandBuffers which can be recorded in different threads
+	// TODO: if commandBuffer will most likely change every frame, it should be VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, because caching commands on GPU side can be inefficient
+	// TODO: model and texture loading should be done off thread and renderer should know how to deal with not yet loaded resources
+	private static void drawFrame(double lag) {
 		try (final MemoryStack stack = stackPush()) {
 			final Frame currentFrame = inFlightFrames.get(currentFrameIndex);
 
@@ -70,7 +93,7 @@ public class MainRenderer {
 				recreateSwapChain();
 			}
 
-			int vkResult = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, currentFrame.imageAvailableSemaphore(), VK_NULL_HANDLE, pImageIndex);
+			int vkResult = vkAcquireNextImageKHR(device, swapChainHandle, UINT64_MAX, currentFrame.imageAvailableSemaphore(), VK_NULL_HANDLE, pImageIndex);
 			if (vkResult == VK_ERROR_OUT_OF_DATE_KHR) {
 				recreateSwapChain();
 				return;
@@ -85,7 +108,7 @@ public class MainRenderer {
 			if (imagesInFlight.containsKey(imageIndex)) {
 				vkWaitForFences(device, imagesInFlight.get(imageIndex).fence(), true, UINT64_MAX);
 			} else {
-				synchronized (queues.present.index) {
+				synchronized (queues.present) {
 					vkQueueWaitIdle(queues.present.queue);
 				}
 			}
@@ -100,14 +123,14 @@ public class MainRenderer {
 
 			if (dirty) {
 				vkResetCommandPool(device, commandPool, 0);
-				for (int i = 0; i < swapChainImages.size(); i++) {
+				for (int i = 0; i < swapChainImageCount; i++) {
 					recordPrimaryCommandBuffers(i);
 				}
 			}
 
 			imagesInFlight.put(imageIndex, currentFrame);
 
-			final VkSubmitInfo submitInfo = VkSubmitInfo.callocStack(stack)
+			final VkSubmitInfo submitInfo = VkSubmitInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 					.waitSemaphoreCount(1)
 					.pWaitSemaphores(currentFrame.pImageAvailableSemaphore())
@@ -116,7 +139,7 @@ public class MainRenderer {
 					.pCommandBuffers(stack.pointers(primaryCommandBuffers[imageIndex]));
 
 			vkResetFences(device, currentFrame.pFence());
-			synchronized (queues.graphics.index) {
+			synchronized (queues.graphics) {
 				vkResult = vkQueueSubmit(queues.graphics.queue, submitInfo, currentFrame.fence());
 			}
 			if (vkResult != VK_SUCCESS) {
@@ -124,14 +147,14 @@ public class MainRenderer {
 				throw new RuntimeException("Failed to submit draw command buffer: " + VKReturnCode.getByCode(vkResult));
 			}
 
-			final VkPresentInfoKHR presentInfo = VkPresentInfoKHR.callocStack(stack)
+			final VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
 					.pWaitSemaphores(currentFrame.pRenderFinishedSemaphore())
 					.swapchainCount(1)
-					.pSwapchains(stack.longs(swapChain))
+					.pSwapchains(stack.longs(swapChainHandle))
 					.pImageIndices(pImageIndex);
 
-			synchronized (queues.present.index) {
+			synchronized (queues.present) {
 				vkResult = vkQueuePresentKHR(queues.present.queue, presentInfo);
 			}
 			if (vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR) {
@@ -150,17 +173,17 @@ public class MainRenderer {
 	}
 
 	public static void createSwapChainObjects() {
-		primaryCommandBuffers = createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, swapChainImages.size(), commandPool);
+		primaryCommandBuffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, Vulkan.swapChainImageCount, commandPool);
 
 		renderers.forEach(IRenderer::createSwapChain);
 	}
 
 	private static void createSyncObjects() {
 		try (final MemoryStack stack = stackPush()) {
-			final VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.callocStack(stack)
+			final VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
 
-			final VkFenceCreateInfo fenceInfo = VkFenceCreateInfo.callocStack(stack)
+			final VkFenceCreateInfo fenceInfo = VkFenceCreateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO)
 					.flags(VK_FENCE_CREATE_SIGNALED_BIT);
 
@@ -169,7 +192,9 @@ public class MainRenderer {
 			final LongBuffer pFence = stack.mallocLong(1);
 
 			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				if (vkCreateSemaphore(device, semaphoreInfo, null, pImageAvailableSemaphore) != VK_SUCCESS || vkCreateSemaphore(device, semaphoreInfo, null, pRenderFinishedSemaphore) != VK_SUCCESS || vkCreateFence(device, fenceInfo, null, pFence) != VK_SUCCESS) {
+				if (vkCreateSemaphore(device, semaphoreInfo, null, pImageAvailableSemaphore) != VK_SUCCESS ||
+				    vkCreateSemaphore(device, semaphoreInfo, null, pRenderFinishedSemaphore) != VK_SUCCESS ||
+				    vkCreateFence(device, fenceInfo, null, pFence) != VK_SUCCESS) {
 					throw new RuntimeException("Failed to create synchronization objects for the frame " + i);
 				}
 
@@ -180,10 +205,10 @@ public class MainRenderer {
 
 	public static void recordPrimaryCommandBuffers(int imageIndex) {
 		try (final MemoryStack stack = stackPush()) {
-			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
 
-			final VkClearValue.Buffer clearValues = VkClearValue.callocStack(2, stack);
+			final VkClearValue.Buffer clearValues = VkClearValue.calloc(2, stack);
 			clearValues.get(0).color()
 					.float32(0, 100 / 255.0f)
 					.float32(1, 149 / 255.0f)
@@ -192,13 +217,13 @@ public class MainRenderer {
 			clearValues.get(1).depthStencil()
 					.set(1, 0);
 
-			final VkRect2D renderArea = VkRect2D.callocStack(stack)
+			final VkRect2D renderArea = VkRect2D.calloc(stack)
 					.offset(offset -> offset.set(0, 0))
 					.extent(swapChainExtent);
 
 			final VkCommandBuffer commandBuffer = primaryCommandBuffers[imageIndex];
 
-			final VkRenderPassBeginInfo renderPassInfo = VkRenderPassBeginInfo.callocStack(stack)
+			final VkRenderPassBeginInfo renderPassInfo = VkRenderPassBeginInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
 					.renderPass(renderPass)
 					.framebuffer(swapChainFramebuffers.getLong(imageIndex))
@@ -218,7 +243,7 @@ public class MainRenderer {
 
 			vkCmdEndRenderPass(commandBuffer);
 
-			VkCheck(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer");
+			VkCheck(vkEndCommandBuffer(commandBuffer), "Failed to finish recording command buffer");
 		}
 	}
 

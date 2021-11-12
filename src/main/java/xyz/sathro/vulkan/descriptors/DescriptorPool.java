@@ -55,7 +55,7 @@ public class DescriptorPool implements IDisposable {
 				throw new IllegalArgumentException("This pool doesn't accept " + DescriptorType.getByCode(type));
 			}
 			if (poolType.amountLeft < typesToTake.get(type)) {
-				throw new IllegalArgumentException("This pool doesn't have enough space for " + DescriptorType.getByCode(type));
+				throw new IllegalStateException("This pool doesn't have enough space for " + DescriptorType.getByCode(type));
 			}
 			poolType.amountLeft -= typesToTake.get(type);
 		}
@@ -81,6 +81,7 @@ public class DescriptorPool implements IDisposable {
 				descriptorSets.add(new DescriptorSet(layouts[i], setsBuf.get(i), this));
 			}
 		}
+
 		return descriptorSets;
 	}
 

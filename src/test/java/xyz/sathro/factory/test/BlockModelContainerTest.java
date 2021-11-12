@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class BlockModelContainerTest {
+public class BlockModelContainerTest {
 	private static final int MAX_SIZE = 1 << BlockModelContainer.MAX_DEEPNESS + 1;
 	private static final int HALF_SIZE = MAX_SIZE >> 1;
 

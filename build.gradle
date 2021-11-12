@@ -7,13 +7,19 @@ plugins {
 
 switch (OperatingSystem.current()) {
 	case OperatingSystem.LINUX:
-		project.ext.lwjglNatives = "natives-linux"
+		def osArch = System.getProperty("os.arch")
+		project.ext.lwjglNatives = osArch.startsWith("arm") || osArch.startsWith("aarch64")
+			? "natives-linux-${osArch.contains("64") || osArch.startsWith("armv8") ? "arm64" : "arm32"}"
+			: "natives-linux"
 		break
 	case OperatingSystem.MAC_OS:
-		project.ext.lwjglNatives = "natives-macos"
+		project.ext.lwjglNatives = natives-macos
 		break
 	case OperatingSystem.WINDOWS:
-		project.ext.lwjglNatives = System.getProperty("os.arch").contains("64") ? "natives-windows" : "natives-windows-x86"
+		def osArch = System.getProperty("os.arch")
+		project.ext.lwjglNatives = osArch.contains("64")
+			? "natives-windows${osArch.startsWith("aarch64") ? "-arm64" : ""}"
+			: "natives-windows-x86"
 		break
 }
 
@@ -24,7 +30,7 @@ java {
 }
 
 compileJava {
-	options.release.set("$javaVersion" as Integer)
+	options.release.set("$project.javaVersion" as Integer)
 }
 
 repositories {
@@ -110,7 +116,7 @@ task fatJar(type: Jar) {
 	dependsOn configurations.runtimeClasspath
 
 	from {
-		configurations.runtimeClasspath.findAll { it.name.endsWith("jar") }.collect { zipTree(it) }
+		configurations.runtimeClasspath.findAll { it.name.endsWith("jar") }.collect { zipTree(it) } + configurations.runtimeClasspath + "/assets/"
 	}
 
 	manifest {

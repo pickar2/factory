@@ -1,7 +1,7 @@
 package xyz.sathro.factory.ui.constraints;
 
 import org.joml.Vector2d;
-import xyz.sathro.factory.ui.components.UIComponent;
+import xyz.sathro.factory.ui.components.BasicUIComponent;
 import xyz.sathro.factory.ui.vector.UIVector;
 import xyz.sathro.factory.ui.vector.UIVectorCoordinate;
 import xyz.sathro.factory.ui.vector.UIVectorType;
@@ -15,10 +15,10 @@ public class SetSizeConstraint implements SizeConstraint {
 	}
 
 	@Override
-	public void apply(UIComponent component) {
+	public void apply(BasicUIComponent component) {
 		if (sizeVector.type == UIVectorType.RELATIVE) {
 			if (component.getParent() != null) {
-				final UIComponent parent = component.getParent();
+				final BasicUIComponent parent = component.getParent();
 				if (sizeVector.coordinate == UIVectorCoordinate.X || sizeVector.coordinate == UIVectorCoordinate.BOTH) {
 					component.size.x = Maths.floor(parent.size.x * sizeVector.vec.x);
 				}

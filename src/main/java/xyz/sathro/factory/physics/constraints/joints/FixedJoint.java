@@ -5,7 +5,6 @@ import org.joml.Vector3d;
 import xyz.sathro.factory.physics.Body;
 import xyz.sathro.factory.physics.Pose;
 import xyz.sathro.factory.physics.XPBD;
-import xyz.sathro.factory.physics.constraints.Constraint;
 
 public class FixedJoint extends Joint {
 	public FixedJoint(Body body0, Body body1, Pose localPose0, Pose localPose1) {

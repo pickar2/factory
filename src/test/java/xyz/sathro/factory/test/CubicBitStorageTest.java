@@ -20,7 +20,7 @@ public class CubicBitStorageTest {
 			for (int y = 0; y < SIZE; y++) {
 				for (int x = 0; x < SIZE; x++) {
 					values[index] = random.nextInt(1 << storage.stride);
-					storage.set(x, y, z, values[index++]);
+					storage.set(index, values[index++]);
 				}
 			}
 		}

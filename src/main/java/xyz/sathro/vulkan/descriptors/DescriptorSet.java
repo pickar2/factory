@@ -44,15 +44,15 @@ public class DescriptorSet {
 
 		private UpdateBuilder() { }
 
-		public DescriptorWrite addWrite(int dstArrayElement, int descriptorCount, int bindingIndex) {
+		public DescriptorWrite write(int dstArrayElement, int descriptorCount, int bindingIndex) {
 			return new DescriptorWrite(dstArrayElement, descriptorCount, bindingIndex);
 		}
 
-		public DescriptorWrite addWrite(int bindingIndex) {
+		public DescriptorWrite write(int bindingIndex) {
 			return new DescriptorWrite(bindingIndex);
 		}
 
-		public UpdateBuilder addCopy(int srcBindingIndex, int srcArrayElement, DescriptorSet srcSet, int dstBindingIndex, int dstArrayElement, DescriptorSet dstSet, int descriptorCount) {
+		public UpdateBuilder copy(int srcBindingIndex, int srcArrayElement, DescriptorSet srcSet, int dstBindingIndex, int dstArrayElement, DescriptorSet dstSet, int descriptorCount) {
 			copies.add(new DescriptorCopy(srcBindingIndex, srcArrayElement, srcSet, dstBindingIndex, dstArrayElement, dstSet, descriptorCount));
 			return this;
 		}

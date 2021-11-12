@@ -22,7 +22,7 @@ readonly layout(set = 0, binding = 0) uniform projectionMatrix {
 };
 
 readonly layout(set = 1, binding = 0) uniform dataArray {
-	Data[8] data;
+	Data[2048] data;
 };
 
 vec4 intToRGBA(const int value) {
@@ -44,6 +44,9 @@ int getRInt16(const int value) {
 
 const vec2[] vertexPos = { vec2(0, 0), vec2(1, 0), vec2(0, 1), vec2(1, 1) };
 
+const float MAX_Z_INDEX = 65535;
+const int HALF_INT16 = 32768;
+
 mat4 scalePos = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 
 void main() {
@@ -52,9 +55,9 @@ void main() {
 	scalePos[0][0] = getLInt16(d.sizeX_sizeY);
 	scalePos[1][1] = getRInt16(d.sizeX_sizeY);
 
-	scalePos[3][0] = getLInt16(d.posX_posY);
-	scalePos[3][1] = getRInt16(d.posX_posY);
-	scalePos[3][2] = getLInt16(d.posZ_textureID)/65536.0-0.01;
+	scalePos[3][0] = getLInt16(d.posX_posY) - HALF_INT16;
+	scalePos[3][1] = getRInt16(d.posX_posY) - HALF_INT16;
+	scalePos[3][2] = 1-getLInt16(d.posZ_textureID)/MAX_Z_INDEX;
 
 	gl_Position = proj * scalePos * vec4(vertexPos[vertexIndex], 0, 1.0);
 

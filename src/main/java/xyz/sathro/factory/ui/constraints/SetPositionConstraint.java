@@ -1,7 +1,7 @@
 package xyz.sathro.factory.ui.constraints;
 
 import org.joml.Vector2i;
-import xyz.sathro.factory.ui.components.UIComponent;
+import xyz.sathro.factory.ui.components.BasicUIComponent;
 import xyz.sathro.factory.ui.vector.UIVector;
 import xyz.sathro.factory.ui.vector.UIVectorCoordinate;
 import xyz.sathro.factory.ui.vector.UIVectorType;
@@ -14,10 +14,10 @@ public class SetPositionConstraint implements PositionConstraint {
 	}
 
 	@Override
-	public void apply(UIComponent component) {
+	public void apply(BasicUIComponent component) {
 		if (positionVector.type == UIVectorType.RELATIVE) {
 			if (component.getParent() != null) {
-				final UIComponent parent = component.getParent();
+				final BasicUIComponent parent = component.getParent();
 				if (positionVector.coordinate == UIVectorCoordinate.X || positionVector.coordinate == UIVectorCoordinate.BOTH) {
 					component.position.x = parent.position.x + positionVector.vec.x;
 				}

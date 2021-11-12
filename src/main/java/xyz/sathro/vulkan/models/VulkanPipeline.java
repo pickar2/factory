@@ -9,12 +9,12 @@ import static org.lwjgl.vulkan.VK10.vkDestroyPipelineLayout;
 
 @RequiredArgsConstructor
 public class VulkanPipeline implements IDisposable {
-	public long layout;
-	public long pipeline;
 	public final Class<? extends IVertex> vertexType;
+	public long layout;
+	public long handle;
 
 	public void dispose() {
-		vkDestroyPipeline(Vulkan.device, pipeline, null);
+		vkDestroyPipeline(Vulkan.device, handle, null);
 		vkDestroyPipelineLayout(Vulkan.device, layout, null);
 	}
 }

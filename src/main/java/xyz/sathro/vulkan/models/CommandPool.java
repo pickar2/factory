@@ -15,6 +15,10 @@ public class CommandPool implements IDisposable {
 		return new CommandPool(createCommandPool(flags, queue), createDefaultFence(true));
 	}
 
+	public static CommandPool newDefault(int flags, VulkanQueue queue, boolean fenceSignaled) {
+		return new CommandPool(createCommandPool(flags, queue), createDefaultFence(fenceSignaled));
+	}
+
 	public void dispose() {
 		vkDestroyFence(device, fence, null);
 		vkDestroyCommandPool(device, handle, null);

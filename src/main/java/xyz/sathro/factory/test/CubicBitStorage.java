@@ -48,39 +48,38 @@ public class CubicBitStorage {
 		return bits & 63;
 	}
 
-	@SuppressWarnings("ShiftOutOfRange")
 	public long get(int index) {
-		final int bits = bits(index);
-		final int storageIndex = storageIndex(bits);
-		final int bitIndexInv = 64 - bitIndex(bits);
-		final int bitIndexInvMinusStride = bitIndexInv - stride;
-
-		if (bitIndexInvMinusStride >= 0) {
-			return (this.storage[storageIndex] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask;
-		} else {
-			return (this.storage[storageIndex] & (ONES ^ ONES << bitIndexInv)) << stride - bitIndexInv & (mask ^ mask >> bitIndexInv) |
-			       (this.storage[storageIndex + 1] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask >> bitIndexInv;
-		}
+		return getFromBits(bits(index));
 	}
 
-	@SuppressWarnings("ShiftOutOfRange")
 	public long get(int x, int y, int z) {
-		final int bits = bits(x, y, z);
+		return getFromBits(bits(x, y, z));
+	}
+
+	@SuppressWarnings("ShiftOutOfRange")
+	private long getFromBits(int bits) {
 		final int storageIndex = storageIndex(bits);
 		final int bitIndexInv = 64 - bitIndex(bits);
 		final int bitIndexInvMinusStride = bitIndexInv - stride;
 
 		if (bitIndexInvMinusStride >= 0) {
-			return (this.storage[storageIndex] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask;
+			return (storage[storageIndex] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask;
 		} else {
-			return (this.storage[storageIndex] & (ONES ^ ONES << bitIndexInv)) << stride - bitIndexInv & (mask ^ mask >> bitIndexInv) |
-			       (this.storage[storageIndex + 1] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask >> bitIndexInv;
+			return (storage[storageIndex] & (ONES ^ ONES << bitIndexInv)) << stride - bitIndexInv & (mask ^ mask >> bitIndexInv) |
+			       (storage[storageIndex + 1] & mask << bitIndexInvMinusStride) >> bitIndexInvMinusStride & mask >> bitIndexInv;
 		}
 	}
 
-	@SuppressWarnings("ShiftOutOfRange")
+	public void set(int index, long value) {
+		setFromBits(bits(index), value);
+	}
+
 	public void set(int x, int y, int z, long value) {
-		final int bits = bits(x, y, z);
+		setFromBits(bits(x, y, z), value);
+	}
+
+	@SuppressWarnings("ShiftOutOfRange")
+	private void setFromBits(int bits, long value) {
 		final int storageIndex = storageIndex(bits);
 		final int bitIndexInv = 64 - bitIndex(bits);
 		final int bitIndexInvMinusStride = bitIndexInv - stride;
@@ -88,10 +87,10 @@ public class CubicBitStorage {
 		value &= mask; // clamp value
 
 		if (bitIndexInvMinusStride >= 0) {
-			this.storage[storageIndex] = this.storage[storageIndex] & (ONES ^ mask << bitIndexInvMinusStride) | value << bitIndexInvMinusStride;
+			storage[storageIndex] = storage[storageIndex] & (ONES ^ mask << bitIndexInvMinusStride) | (value << bitIndexInvMinusStride);
 		} else {
-			this.storage[storageIndex] = this.storage[storageIndex] & ONES << bitIndexInv | value >> -bitIndexInvMinusStride;
-			this.storage[storageIndex + 1] = this.storage[storageIndex + 1] & (ONES ^ mask << bitIndexInvMinusStride) | value << bitIndexInvMinusStride;
+			storage[storageIndex] = storage[storageIndex] & ONES << bitIndexInv | value >> -bitIndexInvMinusStride;
+			storage[storageIndex + 1] = storage[storageIndex + 1] & (ONES ^ mask << bitIndexInvMinusStride) | value << bitIndexInvMinusStride;
 		}
 	}
 }

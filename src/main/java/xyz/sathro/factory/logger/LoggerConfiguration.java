@@ -37,13 +37,13 @@ public class LoggerConfiguration extends ConfigurationFactory {
 
 	private static void ConsoleBuilderInit(ConfigurationBuilder<BuiltConfiguration> builder) {
 		final AppenderComponentBuilder consoleBuilder = builder.newAppender("Stdout", "CONSOLE").addAttribute("target",
-				ConsoleAppender.Target.SYSTEM_OUT);
+		                                                                                                      ConsoleAppender.Target.SYSTEM_OUT);
 		consoleBuilder.add(builder.newLayout("PatternLayout").
 				addAttribute("pattern", "[%d{HH:mm:ss.SSS}|%level] %msg%n"));
 		final LayoutComponentBuilder list = builder.newLayout("Filters");
 		for (MarkerConfig marker : SettingsManager.markers) {
 			list.addComponent(builder.newFilter("MarkerFilter", marker.consoleShow,
-					Filter.Result.NEUTRAL).addAttribute("marker", marker.markerName));
+			                                    Filter.Result.NEUTRAL).addAttribute("marker", marker.markerName));
 		}
 		consoleBuilder.add(list);
 		builder.add(consoleBuilder);
@@ -56,7 +56,7 @@ public class LoggerConfiguration extends ConfigurationFactory {
 		final LayoutComponentBuilder list = builder.newLayout("Filters");
 		for (MarkerConfig marker : SettingsManager.markers) {
 			list.addComponent(builder.newFilter("MarkerFilter", marker.fileShow,
-					Filter.Result.NEUTRAL).addAttribute("marker", marker.markerName));
+			                                    Filter.Result.NEUTRAL).addAttribute("marker", marker.markerName));
 		}
 		fileBuilder.add(list);
 		builder.add(fileBuilder);
@@ -75,7 +75,7 @@ public class LoggerConfiguration extends ConfigurationFactory {
 
 	@Override
 	protected String[] getSupportedTypes() {
-		return new String[] {"*"};
+		return new String[] { "*" };
 	}
 
 //	-Dlog4j2.configurationFactory=com.baeldung.log4j2.CustomConfigFactory

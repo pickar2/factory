@@ -66,8 +66,8 @@ public class Maths {
 		return new Matrix3d(vector.x, 0, 0, 0, vector.y, 0, 0, 0, vector.z);
 	}
 
-	public static int asTwoInt16(int left, int right) {
-		return ((left << 16) & 0xFFFF0000) | (right & 0x0000FFFF);
+	public static int asTwoInt16(int first, int second) {
+		return ((first << 16) & 0xFFFF0000) | (second & 0x0000FFFF);
 	}
 
 	public static int ceilDiv(double a, double b) {

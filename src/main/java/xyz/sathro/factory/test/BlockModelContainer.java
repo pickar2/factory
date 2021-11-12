@@ -63,6 +63,8 @@ public class BlockModelContainer {
 	}
 
 	public static void main(String[] args) {
+		System.setProperty("joml.format", "false");
+
 		BlockTexture texture = new BlockTexture();
 		texture.id = 42;
 		UnitBlockModelContainer unit = new UnitBlockModelContainer();
@@ -478,6 +480,27 @@ public class BlockModelContainer {
 		final TexturedQuad[][][] maskQuads = getMaskQuads(offsetX, offsetY, offsetZ);
 		final TexturedQuad[][][] processedQuads = processQuads(maskQuads);
 		final TexturedQuad[][][] combinedQuads = combineQuads(processedQuads);
+
+//		for (Side side : Side.values()) {
+//			System.out.println(side);
+//			final TexturedQuad[][] sideQuads = combinedQuads[side.ordinal()];
+//
+//			for (int z = 0; z < blocksPerSide; z++) {
+//				for (int y = 0; y < blocksPerSide; y++) {
+//					for (int x = 0; x < blocksPerSide; x++) {
+//						final int index = index(x, y, z);
+//
+//						if (sideQuads[index] == null) {
+//							System.out.printf("(%d, %d, %d): null%n", x, y, z);
+//						} else {
+//							System.out.printf("(%d, %d, %d): %s%n", x, y, z, Arrays.toString(sideQuads[index]));
+//						}
+//					}
+//				}
+//			}
+//		}
+//		System.out.println();
+
 		saveQuads(combinedQuads, offsetX, offsetY, offsetZ, TexturedQuad::compatible);
 
 		this.dirty = false;

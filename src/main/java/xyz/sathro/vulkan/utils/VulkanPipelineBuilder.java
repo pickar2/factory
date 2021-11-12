@@ -21,6 +21,7 @@ public class VulkanPipelineBuilder {
 	private float lineWidth = 1.0f;
 	private int cullMode = VK_CULL_MODE_NONE;
 	private VkPipelineRasterizationStateCreateInfo rasterizer = null;
+	private boolean depthBuffer = true;
 
 	// TODO: change vertexInstance to some IVertexFabric?
 	public VulkanPipelineBuilder(String[] vertShaderPaths, String[] fragShaderPaths, IVertex vertexInstance, DescriptorSetLayout[] descriptorSetLayouts) {
@@ -36,6 +37,11 @@ public class VulkanPipelineBuilder {
 
 		this.vertex = vertexInstance;
 		this.descriptorSetLayouts = descriptorSetLayouts;
+	}
+
+	public VulkanPipelineBuilder setDepthBuffer(boolean buffer) {
+		this.depthBuffer = buffer;
+		return this;
 	}
 
 	public VulkanPipelineBuilder setTopology(int topology) {

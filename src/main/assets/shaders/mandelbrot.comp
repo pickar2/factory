@@ -1,0 +1,47 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+#define WIDTH 3200
+#define HEIGHT 2400
+#define WORKGROUP_SIZE 32
+
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1) in;
+
+writeonly layout(binding = 0) buffer buf {
+	int imageData[];
+};
+
+const vec3 d = vec3(0.3, 0.3, 0.5);
+const vec3 e = vec3(-0.2, -0.3, -0.5);
+const vec3 f = vec3(2.1, 2.0, 3.0);
+const vec3 g = vec3(0.0, 0.1, 0.0);
+
+const int M = 256;
+const float TAU = 6.28318;
+
+int vec3ToIntRGBA(const vec3 color) {
+	return ((int(color.x * 255) & 0xFF) << 16) | ((int(color.g * 255) & 0xFF) << 8) | ((int(color.b * 255) & 0xFF) << 0)  | (255 << 24);
+}
+
+void main() {
+	if (gl_GlobalInvocationID.x >= WIDTH || gl_GlobalInvocationID.y >= HEIGHT) return;
+
+	const float x = float(gl_GlobalInvocationID.x) / float(WIDTH);
+	const float y = float(gl_GlobalInvocationID.y) / float(HEIGHT);
+
+	const vec2 uv = vec2(x, y);
+	const vec2 c = vec2(-0.445, 0.0) + (uv - 0.5) * (2.0 + 1.7 * 0.2);
+
+	vec2 z = vec2(0);
+	int n = 0;
+	for (; n < M; n++)
+	{
+		z = vec2(z.x * z.x - z.y * z.y, 2 * z.x * z.y) + c;
+		if (dot(z, z) > 2) break;
+	}
+
+	const float t = n / float(M);
+	const vec3 color = d + e * cos(TAU * (f * t + g));
+
+	imageData[WIDTH * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = vec3ToIntRGBA(color);
+}

@@ -30,14 +30,14 @@ public class VulkanVertexInfo implements IDisposable {
 				.pVertexBindingDescriptions(getBindingDescription());
 	}
 
+	public static Builder builder() {
+		return new Builder();
+	}
+
 	public void dispose() {
 		vertexCreateInfo.free();
 		bindingDescription.free();
 		attributeDescriptions.free();
-	}
-
-	public static Builder builder() {
-		return new Builder();
 	}
 
 	public static class Builder {

@@ -10,11 +10,9 @@ import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.descriptors.DescriptorPool;
 import xyz.sathro.vulkan.descriptors.DescriptorSet;
 import xyz.sathro.vulkan.descriptors.DescriptorSetLayout;
-import xyz.sathro.vulkan.models.IBufferObject;
-import xyz.sathro.vulkan.models.VulkanBuffer;
-import xyz.sathro.vulkan.models.VulkanImage;
-import xyz.sathro.vulkan.models.VulkanPipeline;
+import xyz.sathro.vulkan.models.*;
 import xyz.sathro.vulkan.renderer.IRenderer;
+import xyz.sathro.vulkan.utils.CommandBuffers;
 import xyz.sathro.vulkan.utils.ModelLoader;
 import xyz.sathro.vulkan.utils.VulkanUtils;
 import xyz.sathro.vulkan.vertex.IVertex;
@@ -41,7 +39,8 @@ public class HouseRenderer implements IRenderer {
 	private DescriptorSetLayout descriptorSetLayout;
 	private List<DescriptorSet> descriptorSets;
 
-	private long commandPool;
+//	private long commandPoolHandle;
+	private CommandPool commandPool;
 	private VkCommandBuffer[][] commandBuffers;
 
 	public VulkanBuffer vertexBuffer;
@@ -58,9 +57,9 @@ public class HouseRenderer implements IRenderer {
 	private HouseRenderer() { }
 
 	private VulkanBuffer[] createUniformBuffers() {
-		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
+		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImageCount];
 
-		for (int i = 0; i < Vulkan.swapChainImages.size(); i++) {
+		for (int i = 0; i < Vulkan.swapChainImageCount; i++) {
 			uniformBuffers[i] = Vulkan.createBuffer(UBO.SIZEOF, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		}
 
@@ -70,18 +69,18 @@ public class HouseRenderer implements IRenderer {
 	private void prepareCommandBuffers() {
 		cbChanged = true;
 		try (MemoryStack stack = stackPush()) {
-			LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.buffer);
-			LongBuffer offsets = stack.longs(0);
+			final LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.buffer);
+			final LongBuffer offsets = stack.longs(0);
 
 			for (int i = 0; i < commandBuffers.length; i++) {
-				VkCommandBuffer commandBuffer = commandBuffers[i][0];
+				final VkCommandBuffer commandBuffer = commandBuffers[i][0];
 
-				VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
+				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
 						.renderPass(Vulkan.renderPass)
 						.framebuffer(Vulkan.swapChainFramebuffers.getLong(i))
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO);
 
-				VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
 						.pInheritanceInfo(inheritanceInfo)
 						.flags(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
@@ -89,7 +88,7 @@ public class HouseRenderer implements IRenderer {
 				VulkanUtils.VkCheck(vkBeginCommandBuffer(commandBuffer, beginInfo), "Failed to begin recording command buffer");
 
 				for (VulkanPipeline graphicPipeline : graphicPipelines) {
-					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.pipeline);
+					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffer, offsets);
 					vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -105,9 +104,9 @@ public class HouseRenderer implements IRenderer {
 	}
 
 	private VkCommandBuffer[][] createCommandBuffers() {
-		VkCommandBuffer[] buffers = Vulkan.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImages.size(), commandPool);
+		VkCommandBuffer[] buffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImageCount, commandPool.handle);
 
-		VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImages.size()][];
+		VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImageCount][];
 		for (int i = 0; i < commandBuffers.length; i++) {
 			commandBuffers[i] = new VkCommandBuffer[] { buffers[i] };
 		}
@@ -117,9 +116,9 @@ public class HouseRenderer implements IRenderer {
 
 	private DescriptorPool createDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImages.size())
-				.setTypeSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Vulkan.swapChainImages.size())
-				.setMaxSets(Vulkan.swapChainImages.size())
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount)
+				.setTypeSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Vulkan.swapChainImageCount)
+				.setMaxSets(Vulkan.swapChainImageCount)
 				.build();
 	}
 
@@ -131,7 +130,7 @@ public class HouseRenderer implements IRenderer {
 	}
 
 	private List<DescriptorSet> createDescriptorSets() {
-		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImages.size());
+		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
 			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
@@ -149,8 +148,8 @@ public class HouseRenderer implements IRenderer {
 				bufferInfo.buffer(uniformBuffers[i].buffer);
 
 				descriptorSet.updateBuilder()
-						.addWrite(0).pBufferInfo(bufferInfo).add()
-						.addWrite(1).pImageInfo(imageInfo).add()
+						.write(0).pBufferInfo(bufferInfo).add()
+						.write(1).pImageInfo(imageInfo).add()
 						.update();
 			}
 		}
@@ -159,36 +158,36 @@ public class HouseRenderer implements IRenderer {
 	}
 
 	private VulkanPipeline[] createPipelines() {
-		VulkanPipeline[] pipelines = new VulkanPipeline[2];
+		final VulkanPipeline[] pipelines = new VulkanPipeline[2];
 
-		long vertShaderModule = Vulkan.createShaderModule("shaders/26_shader_depth.vert", VK_SHADER_STAGE_VERTEX_BIT);
-		long fragShaderModule = Vulkan.createShaderModule("shaders/26_shader_depth.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
+		final long vertShaderModule = Vulkan.createShaderModule("shaders/house_shader.vert", VK_SHADER_STAGE_VERTEX_BIT);
+		final long fragShaderModule = Vulkan.createShaderModule("shaders/house_shader.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-		VkPipelineShaderStageCreateInfo.Buffer shaderStages = Vulkan.createShaderStages(new long[] { vertShaderModule }, new long[] { fragShaderModule });
+		final VkPipelineShaderStageCreateInfo.Buffer shaderStages = Vulkan.createShaderStages(new long[] { vertShaderModule }, new long[] { fragShaderModule });
 
-		VkPipelineVertexInputStateCreateInfo vertexInputInfo = HouseVertex.vertexInfo.getVertexCreateInfo();
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly = Vulkan.createInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+		final VkPipelineVertexInputStateCreateInfo vertexInputInfo = HouseVertex.vertexInfo.getVertexCreateInfo();
+		final VkPipelineInputAssemblyStateCreateInfo inputAssembly = Vulkan.createInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 				.primitiveRestartEnable(false);
 
-		VkPipelineViewportStateCreateInfo viewportState = Vulkan.createViewportState();
-		VkPipelineRasterizationStateCreateInfo rasterizer = Vulkan.createRasterizer(VK_POLYGON_MODE_FILL, 1.0f, VK_CULL_MODE_BACK_BIT)
+		final VkPipelineViewportStateCreateInfo viewportState = Vulkan.createViewportState();
+		final VkPipelineRasterizationStateCreateInfo rasterizer = Vulkan.createRasterizer(VK_POLYGON_MODE_FILL, 1.0f, VK_CULL_MODE_BACK_BIT)
 				.depthClampEnable(false)
 				.rasterizerDiscardEnable(false)
 				.depthBiasEnable(false);
 
-		VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.callocStack()
+		final VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.callocStack()
 				.sType(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO)
 				.sampleShadingEnable(false)
 				.minSampleShading(0.2f)
 				.rasterizationSamples(Vulkan.msaaSamples);
 
-		VkPipelineColorBlendStateCreateInfo colorBlendingDepth = Vulkan.createColorBlending(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-		VkPipelineColorBlendStateCreateInfo colorBlendingColor = Vulkan.createColorBlending(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+		final VkPipelineColorBlendStateCreateInfo colorBlendingDepth = Vulkan.createColorBlending(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+		final VkPipelineColorBlendStateCreateInfo colorBlendingColor = Vulkan.createColorBlending(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 
-		VkPipelineLayoutCreateInfo pipelineLayout = Vulkan.createPipelineLayout(descriptorSetLayout.getHandle(), null);
+		final VkPipelineLayoutCreateInfo pipelineLayout = Vulkan.createPipelineLayout(descriptorSetLayout.getHandle(), null);
 
-		VkPipelineDepthStencilStateCreateInfo depthStencilDepth = Vulkan.createDepthStencil(VK_COMPARE_OP_LESS, true);
-		VkPipelineDepthStencilStateCreateInfo depthStencilColor = Vulkan.createDepthStencil(VK_COMPARE_OP_EQUAL, false);
+		final VkPipelineDepthStencilStateCreateInfo depthStencilDepth = Vulkan.createDepthStencil(VK_COMPARE_OP_LESS, true);
+		final VkPipelineDepthStencilStateCreateInfo depthStencilColor = Vulkan.createDepthStencil(VK_COMPARE_OP_EQUAL, false);
 
 		pipelines[0] = Vulkan.createGraphicsPipeline(HouseVertex.class, shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingDepth, pipelineLayout, depthStencilDepth); //depth write pipeline
 		pipelines[1] = Vulkan.createGraphicsPipeline(HouseVertex.class, shaderStages, vertexInputInfo, inputAssembly, viewportState, rasterizer, multisampling, colorBlendingColor, pipelineLayout, depthStencilColor); //color write pipeline
@@ -217,7 +216,7 @@ public class HouseRenderer implements IRenderer {
 
 	@Override
 	public void init() {
-		commandPool = Vulkan.createCommandPool(0, Vulkan.queues.graphics);
+		commandPool = CommandPool.newDefault(0, Vulkan.queues.graphics);
 		descriptorSetLayout = createDescriptorSetLayout();
 		textureImage = Vulkan.createTextureImage("textures/chalet.jpg");
 		textureSampler = Vulkan.createTextureSampler(16);
@@ -225,6 +224,12 @@ public class HouseRenderer implements IRenderer {
 		vertexBuffer = Vulkan.createVertexBuffer(Arrays.asList(vertices));
 		indexBuffer = Vulkan.createIndexBuffer(indices);
 
+		commandBuffers = createCommandBuffers();
+
+		uniformBuffers = createUniformBuffers();
+
+		descriptorPool = createDescriptorPool();
+		descriptorSets = createDescriptorSets();
 		createSwapChain();
 	}
 
@@ -261,7 +266,7 @@ public class HouseRenderer implements IRenderer {
 		}
 		if (dirty) {
 			dirty = false;
-			vkResetCommandPool(Vulkan.device, commandPool, 0);
+			vkResetCommandPool(Vulkan.device, commandPool.handle, 0);
 			prepareCommandBuffers();
 		}
 	}
@@ -273,37 +278,26 @@ public class HouseRenderer implements IRenderer {
 
 	@Override
 	public void createSwapChain() {
-		commandBuffers = createCommandBuffers();
-
-		uniformBuffers = createUniformBuffers();
-
-		descriptorPool = createDescriptorPool();
-		descriptorSets = createDescriptorSets();
-
 		graphicPipelines = createPipelines();
 		this.dirty = true;
 	}
 
 	@Override
 	public void cleanupSwapChain() {
-		for (VkCommandBuffer[] commandBuffer : commandBuffers) {
-			VK10.vkFreeCommandBuffers(Vulkan.device, commandPool, commandBuffer[0]);
-		}
-
-		Arrays.stream(uniformBuffers).forEach(VulkanBuffer::dispose);
-
-//		descriptorSets.forEach(DescriptorSet::dispose);
-		descriptorPool.dispose();
-
 		Arrays.stream(graphicPipelines).forEach(VulkanPipeline::dispose);
 	}
 
 	@Override
 	public void dispose() {
+		Arrays.stream(uniformBuffers).forEach(VulkanBuffer::dispose);
 		descriptorSetLayout.dispose();
+		descriptorPool.dispose();
 		textureImage.dispose();
 		vkDestroySampler(Vulkan.device, textureSampler, null);
-		vkDestroyCommandPool(Vulkan.device, commandPool, null);
+		for (VkCommandBuffer[] commandBuffer : commandBuffers) {
+			VK10.vkFreeCommandBuffers(Vulkan.device, commandPool.handle, commandBuffer[0]);
+		}
+		commandPool.dispose();
 		vertexBuffer.dispose();
 		indexBuffer.dispose();
 	}

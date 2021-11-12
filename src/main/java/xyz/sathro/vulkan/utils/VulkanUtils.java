@@ -1,7 +1,7 @@
 package xyz.sathro.vulkan.utils;
 
 import org.lwjgl.BufferUtils;
-import xyz.sathro.factory.util.PathUtils;
+import xyz.sathro.factory.util.ResourceManager;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -43,6 +43,7 @@ public class VulkanUtils {
 		return switch (stage) {
 			case VK_SHADER_STAGE_VERTEX_BIT -> shaderc_vertex_shader;
 			case VK_SHADER_STAGE_FRAGMENT_BIT -> shaderc_fragment_shader;
+			case VK_SHADER_STAGE_COMPUTE_BIT -> shaderc_compute_shader;
 			case VK_SHADER_STAGE_RAYGEN_BIT_NV -> shaderc_raygen_shader;
 			case VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV -> shaderc_closesthit_shader;
 			case VK_SHADER_STAGE_MISS_BIT_NV -> shaderc_miss_shader;
@@ -95,7 +96,7 @@ public class VulkanUtils {
 	public static ByteBuffer compileShader(String path, int vulkanStage) {
 		String source = "";
 		try {
-			source = new String(Files.readAllBytes(PathUtils.fromString(path)));
+			source = new String(Files.readAllBytes(ResourceManager.getPathFromString(path)));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

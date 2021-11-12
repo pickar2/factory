@@ -2,14 +2,13 @@ package xyz.sathro.factory.vulkan.renderers;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import xyz.sathro.factory.ui.Interface;
-import xyz.sathro.factory.ui.components.UIComponent;
+import xyz.sathro.factory.ui.components.BasicUIComponent;
 import xyz.sathro.factory.vulkan.vertices.UIVertex;
 import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.descriptors.DescriptorPool;
@@ -17,6 +16,7 @@ import xyz.sathro.vulkan.descriptors.DescriptorSet;
 import xyz.sathro.vulkan.descriptors.DescriptorSetLayout;
 import xyz.sathro.vulkan.models.*;
 import xyz.sathro.vulkan.renderer.IRenderer;
+import xyz.sathro.vulkan.utils.CommandBuffers;
 import xyz.sathro.vulkan.utils.VulkanPipelineBuilder;
 import xyz.sathro.vulkan.vertex.MutableVertexData;
 
@@ -36,8 +36,8 @@ public class UIRenderer implements IRenderer {
 	private static final int MAX_UBO_SIZE = 256 * 256;
 	public static final UIRenderer INSTANCE = new UIRenderer();
 	private final MatrixUBO matrixUBO = new MatrixUBO();
-	public final LongSet uniqueTextureImages = new LongOpenHashSet();
 	public final Int2ObjectMap<VulkanImage> idToTextureMap = new Int2ObjectOpenHashMap<>();
+	public final Object2IntOpenHashMap<VulkanImage> textureToIDMap = new Object2IntOpenHashMap<>();
 	private boolean dirty;
 	private VulkanPipeline[] graphicPipelines;
 
@@ -47,7 +47,7 @@ public class UIRenderer implements IRenderer {
 	private VulkanBuffer[] matrixUniformBuffers;
 
 	public int dataSetCount = 1;
-	public int maxComponentsPerSet = MAX_UBO_SIZE / UIComponent.SIZEOF;
+	public int maxComponentsPerSet = MAX_UBO_SIZE / BasicUIComponent.SIZEOF;
 	private DescriptorPool dataDescriptorPool;
 	private DescriptorSetLayout dataDescriptorSetLayout;
 	private List<List<DescriptorSet>> dataDescriptorSets;
@@ -64,9 +64,9 @@ public class UIRenderer implements IRenderer {
 	public CombinedBuffer quadCombinedBuffer;
 	public CombinedBuffer combinedBuffer;
 	private boolean cbChanged = false;
-	public List<UIComponent> quadComponentList = new ObjectArrayList<>();
-	public List<UIComponent> nonQuadComponentList = new ObjectArrayList<>();
-	public List<UIComponent> componentList = new ObjectArrayList<>();
+	public List<BasicUIComponent> quadComponentList = new ObjectArrayList<>();
+	public List<BasicUIComponent> nonQuadComponentList = new ObjectArrayList<>();
+	public List<BasicUIComponent> componentList = new ObjectArrayList<>();
 	private long textureSampler;
 
 	private VulkanImage errorTexture;
@@ -76,9 +76,9 @@ public class UIRenderer implements IRenderer {
 
 	// TODO: Move this to API
 	private VulkanBuffer[] createUniformBuffers(int size) {
-		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
+		final VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImageCount];
 
-		for (int i = 0; i < Vulkan.swapChainImages.size(); i++) {
+		for (int i = 0; i < Vulkan.swapChainImageCount; i++) {
 			uniformBuffers[i] = Vulkan.createBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		}
 
@@ -108,10 +108,10 @@ public class UIRenderer implements IRenderer {
 				VkCheck(vkBeginCommandBuffer(commandBuffer, beginInfo), "Failed to begin recording command buffer");
 
 				for (VulkanPipeline graphicPipeline : graphicPipelines) {
-					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.pipeline);
+					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 0, stack.longs(matrixDescriptorSets.get(cbIndex).getHandle()), null);
-					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 1, stack.longs(dataDescriptorSets.get(0).get(cbIndex).getHandle()), dataOffsets);
+					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 1, stack.longs(dataDescriptorSets.get(0).get(cbIndex).getHandle()), null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 2, stack.longs(textureDescriptorSets.get(0).get(cbIndex).getHandle()), null);
 
 					int index = 0;
@@ -123,7 +123,7 @@ public class UIRenderer implements IRenderer {
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, quadVertexBuffer, vertexOffsets);
 					vkCmdBindIndexBuffer(commandBuffer, quadCombinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
-					for (UIComponent component : quadComponentList) {
+					for (BasicUIComponent component : quadComponentList) {
 						// FIXME: now if textureID changed to be outside of its previous set things won't work well
 						if (component.hasTexture && (component.textureID < firstTextureID || component.textureID >= lastTextureID)) {
 							setIndex = ceilDiv(component.textureID, maxTexturesPerSet);
@@ -139,7 +139,7 @@ public class UIRenderer implements IRenderer {
 							index = 0;
 							if (dataSetIndex != dataSetCount - 1) {
 								dataSetIndex++;
-								vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 1, stack.longs(dataDescriptorSets.get(dataSetIndex).get(cbIndex).getHandle()), dataOffsets);
+								vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 1, stack.longs(dataDescriptorSets.get(dataSetIndex).get(cbIndex).getHandle()), null);
 							}
 						}
 //						if (index == 8) {
@@ -154,7 +154,7 @@ public class UIRenderer implements IRenderer {
 						vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(this.combinedBuffer.getVertexBuffer().buffer), vertexOffsets);
 						vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
 						MutableVertexData vertexData;
-						for (UIComponent component : nonQuadComponentList) {
+						for (BasicUIComponent component : nonQuadComponentList) {
 							if (component.hasTexture && (component.textureID < firstTextureID || component.textureID >= lastTextureID)) {
 								setIndex = (int) Math.ceil((double) component.textureID / maxTexturesPerSet);
 
@@ -176,9 +176,9 @@ public class UIRenderer implements IRenderer {
 
 	// TODO: Move this to API
 	private VkCommandBuffer[][] createCommandBuffers() {
-		VkCommandBuffer[] buffers = Vulkan.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImages.size(), commandPool);
+		final VkCommandBuffer[] buffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImageCount, commandPool);
 
-		VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImages.size()][];
+		final VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImageCount][];
 		for (int i = 0; i < commandBuffers.length; i++) {
 			commandBuffers[i] = new VkCommandBuffer[] { buffers[i] };
 		}
@@ -188,8 +188,8 @@ public class UIRenderer implements IRenderer {
 
 	private DescriptorPool createMatrixDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImages.size())
-				.setMaxSets(Vulkan.swapChainImages.size())
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount)
+				.setMaxSets(Vulkan.swapChainImageCount)
 				.build();
 	}
 
@@ -200,7 +200,7 @@ public class UIRenderer implements IRenderer {
 	}
 
 	private List<DescriptorSet> createMatrixDescriptorSets() {
-		final List<DescriptorSet> descriptorSets = matrixDescriptorPool.createDescriptorSets(matrixDescriptorSetLayout, Vulkan.swapChainImages.size());
+		final List<DescriptorSet> descriptorSets = matrixDescriptorPool.createDescriptorSets(matrixDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
 			final VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
@@ -211,7 +211,7 @@ public class UIRenderer implements IRenderer {
 				cameraBufferInfo.buffer(matrixUniformBuffers[i].buffer);
 
 				descriptorSets.get(i).updateBuilder()
-						.addWrite(0).pBufferInfo(cameraBufferInfo).add()
+						.write(0).pBufferInfo(cameraBufferInfo).add()
 						.update();
 			}
 		}
@@ -221,14 +221,14 @@ public class UIRenderer implements IRenderer {
 
 	private DescriptorPool createDataDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Vulkan.swapChainImages.size() * dataSetCount)
-				.setMaxSets(Vulkan.swapChainImages.size() * dataSetCount)
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount * dataSetCount)
+				.setMaxSets(Vulkan.swapChainImageCount * dataSetCount)
 				.build();
 	}
 
 	private DescriptorSetLayout createDataDescriptorSetLayout() {
 		return DescriptorSetLayout.builder()
-				.addBinding(0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+				.addBinding(0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
 				.build();
 	}
 
@@ -236,7 +236,7 @@ public class UIRenderer implements IRenderer {
 		final List<List<DescriptorSet>> descriptorSets = new ObjectArrayList<>();
 
 		for (int setIndex = 0; setIndex < dataSetCount; setIndex++) {
-			final List<DescriptorSet> currentSets = dataDescriptorPool.createDescriptorSets(dataDescriptorSetLayout, Vulkan.swapChainImages.size());
+			final List<DescriptorSet> currentSets = dataDescriptorPool.createDescriptorSets(dataDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 			try (MemoryStack stack = stackPush()) {
 				final VkDescriptorBufferInfo.Buffer uiObjectsBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
@@ -247,7 +247,7 @@ public class UIRenderer implements IRenderer {
 					uiObjectsBufferInfo.buffer(dataUniformBuffers[setIndex][imageIndex].buffer);
 
 					currentSets.get(imageIndex).updateBuilder()
-							.addWrite(0).pBufferInfo(uiObjectsBufferInfo).add()
+							.write(0).pBufferInfo(uiObjectsBufferInfo).add()
 							.update();
 				}
 			}
@@ -260,8 +260,8 @@ public class UIRenderer implements IRenderer {
 
 	private DescriptorPool createTextureDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Vulkan.swapChainImages.size() * maxTexturesPerSet * textureSetCount)
-				.setMaxSets(Vulkan.swapChainImages.size() * textureSetCount)
+				.setTypeSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Vulkan.swapChainImageCount * maxTexturesPerSet * textureSetCount)
+				.setMaxSets(Vulkan.swapChainImageCount * textureSetCount)
 				.build();
 	}
 
@@ -275,7 +275,7 @@ public class UIRenderer implements IRenderer {
 		final List<List<DescriptorSet>> textureDescriptorSets = new ObjectArrayList<>();
 
 		for (int setIndex = 0; setIndex < textureSetCount; setIndex++) {
-			textureDescriptorSets.add(textureDescriptorPool.createDescriptorSets(textureDescriptorSetLayout, Vulkan.swapChainImages.size()));
+			textureDescriptorSets.add(textureDescriptorPool.createDescriptorSets(textureDescriptorSetLayout, Vulkan.swapChainImageCount));
 		}
 
 		updateTextureDescriptorSets(textureDescriptorSets);
@@ -290,7 +290,7 @@ public class UIRenderer implements IRenderer {
 		for (int setIndex = 0; setIndex < textureSetCount; setIndex++) {
 			final int texturesInCurrentSet;
 			if (setIndex == textureSetCount - 1) { // last set
-				texturesInCurrentSet = uniqueTextureImages.size() - (maxTexturesPerSet * setIndex);
+				texturesInCurrentSet = textureToIDMap.size() - (maxTexturesPerSet * setIndex);
 			} else {
 				texturesInCurrentSet = maxTexturesPerSet;
 			}
@@ -313,7 +313,7 @@ public class UIRenderer implements IRenderer {
 
 			for (int i = 0; i < descriptorSets.get(setIndex).size(); i++) {
 				descriptorSets.get(setIndex).get(i).updateBuilder()
-						.addWrite(0).pImageInfo(imageArrayInfo).add()
+						.write(0).pImageInfo(imageArrayInfo).add()
 						.update();
 			}
 
@@ -324,6 +324,7 @@ public class UIRenderer implements IRenderer {
 	private VulkanPipeline[] createPipelines() {
 		return new VulkanPipelineBuilder(new String[] { "shaders/ui_shader.vert" }, new String[] { "shaders/ui_shader.frag" }, new UIVertex(), new DescriptorSetLayout[] { matrixDescriptorSetLayout, dataDescriptorSetLayout, textureDescriptorSetLayout })
 				.setCullMode(VK_CULL_MODE_NONE)
+				.setDepthBuffer(false)
 				.build();
 	}
 
@@ -339,8 +340,8 @@ public class UIRenderer implements IRenderer {
 	@Override
 	public void init() {
 		errorTexture = Vulkan.createTextureImage("textures/texture.jpg");
-		uniqueTextureImages.add(errorTexture.image);
 		idToTextureMap.put(0, errorTexture);
+		textureToIDMap.put(errorTexture, 0);
 		textureSampler = Vulkan.createTextureSampler(1);
 		commandPool = Vulkan.createCommandPool(0, Vulkan.queues.graphics);
 
@@ -371,10 +372,10 @@ public class UIRenderer implements IRenderer {
 		return false;
 	}
 
-	public void rebuildUI(boolean texturesChanged, List<UIComponent> components) {
+	public void rebuildUI(boolean texturesChanged, List<BasicUIComponent> components) {
 		componentList = new ObjectArrayList<>(components);
 
-		int newDataSetCount = Math.max(1, ceilDiv(componentList.size(), maxComponentsPerSet));
+		final int newDataSetCount = Math.max(1, ceilDiv(componentList.size(), maxComponentsPerSet));
 		if (dataSetCount != newDataSetCount) {
 			dirty = true;
 			dataSetCount = newDataSetCount;
@@ -382,7 +383,11 @@ public class UIRenderer implements IRenderer {
 				dataDescriptorPool.registerToDisposal();
 			}
 			if (dataUniformBuffers != null) {
-				Arrays.stream(dataUniformBuffers).forEach(a -> Arrays.stream(a).forEach(VulkanBuffer::registerToDisposal));
+				for (VulkanBuffer[] buffers : dataUniformBuffers) {
+					for (VulkanBuffer buffer : buffers) {
+						buffer.registerToDisposal();
+					}
+				}
 			}
 			dataUniformBuffers = createDataBuffers();
 			dataDescriptorPool = createDataDescriptorPool();
@@ -390,18 +395,22 @@ public class UIRenderer implements IRenderer {
 		}
 
 		if (texturesChanged) {
-			uniqueTextureImages.clear();
-			uniqueTextureImages.add(errorTexture.image);
+			textureToIDMap.clear();
+			textureToIDMap.put(errorTexture, 0);
 			idToTextureMap.clear();
 			idToTextureMap.put(0, errorTexture);
-			for (UIComponent component : componentList) {
-				if (component.hasTexture && !uniqueTextureImages.contains(component.texture.image)) {
-					idToTextureMap.put(uniqueTextureImages.size(), component.texture);
-					component.textureID = uniqueTextureImages.size();
-					uniqueTextureImages.add(component.texture.image);
+			for (BasicUIComponent component : componentList) {
+				if (component.hasTexture) {
+					if (!textureToIDMap.containsKey(component.texture)) {
+						idToTextureMap.put(textureToIDMap.size(), component.texture);
+						textureToIDMap.put(component.texture, textureToIDMap.size() + 1);
+						component.textureID = textureToIDMap.size();
+					} else {
+						component.textureID = textureToIDMap.getInt(component.texture);
+					}
 				}
 			}
-			int newTextureSetCount = Math.max(1, ceilDiv(uniqueTextureImages.size(), maxTexturesPerSet));
+			int newTextureSetCount = Math.max(1, ceilDiv(textureToIDMap.size(), maxTexturesPerSet));
 			if (textureSetCount != newTextureSetCount) {
 				dirty = true;
 				textureSetCount = newTextureSetCount;
@@ -418,7 +427,7 @@ public class UIRenderer implements IRenderer {
 		quadComponentList = new ObjectArrayList<>();
 		nonQuadComponentList = new ObjectArrayList<>();
 
-		for (UIComponent component : componentList) {
+		for (BasicUIComponent component : componentList) {
 			if (component.isSimpleQuad()) {
 				quadComponentList.add(component);
 			} else {
@@ -448,14 +457,14 @@ public class UIRenderer implements IRenderer {
 	}
 
 	public void updateMatrixBuffers() {
-		matrixUBO.proj.identity().setOrtho2D(0, Vulkan.swapChainExtent.width(), 0, Vulkan.swapChainExtent.height());
+		matrixUBO.proj.identity().setOrtho(0, Vulkan.swapChainExtent.width(), 0, Vulkan.swapChainExtent.height(), 2, -2);
 		for (VulkanBuffer buffer : matrixUniformBuffers) {
-			Vulkan.mapDataToVulkanBuffer(matrixUBO::get, buffer, matrixUBO.sizeof());
+			Vulkan.mapDataToVulkanBuffer(matrixUBO, buffer);
 		}
 	}
 
 	public void updateDataBuffers() {
-		updateDataIndex = Vulkan.swapChainImages.size();
+		updateDataIndex = Vulkan.swapChainImageCount;
 	}
 
 	@Override
@@ -517,7 +526,11 @@ public class UIRenderer implements IRenderer {
 
 	@Override
 	public void dispose() {
-		Arrays.stream(dataUniformBuffers).forEach(a -> Arrays.stream(a).forEach(VulkanBuffer::dispose));
+		for (VulkanBuffer[] buffers : dataUniformBuffers) {
+			for (VulkanBuffer buffer : buffers) {
+				buffer.dispose();
+			}
+		}
 
 		matrixDescriptorSetLayout.dispose();
 		dataDescriptorSetLayout.dispose();

@@ -5,13 +5,13 @@ import xyz.sathro.factory.event.events.Event;
 import xyz.sathro.factory.window.MouseButton;
 
 public class MouseDragEvent extends Event {
-	public Vector2i location;
-	public Vector2i oldLocation;
+	public Vector2i pos;
+	public Vector2i oldPos;
 	public MouseButton mouseButton;
 
-	public MouseDragEvent(Vector2i oldLocation, Vector2i location, MouseButton mouseButton) {
-		this.oldLocation = oldLocation;
-		this.location = location;
+	public MouseDragEvent(Vector2i oldPos, Vector2i pos, MouseButton mouseButton) {
+		this.oldPos = oldPos;
+		this.pos = pos;
 		this.mouseButton = mouseButton;
 	}
 }

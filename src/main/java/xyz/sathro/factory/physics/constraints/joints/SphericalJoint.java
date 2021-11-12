@@ -3,7 +3,6 @@ package xyz.sathro.factory.physics.constraints.joints;
 import org.joml.Vector3d;
 import xyz.sathro.factory.physics.Body;
 import xyz.sathro.factory.physics.Pose;
-import xyz.sathro.factory.physics.constraints.Constraint;
 
 import static xyz.sathro.factory.physics.XPBD.*;
 

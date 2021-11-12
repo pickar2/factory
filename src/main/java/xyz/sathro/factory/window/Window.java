@@ -8,7 +8,7 @@ import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.util.SettingsManager;
 import xyz.sathro.factory.window.events.KeyDownEvent;
 import xyz.sathro.factory.window.events.KeyUpEvent;
-import xyz.sathro.vulkan.Vulkan;
+import xyz.sathro.vulkan.renderer.MainRenderer;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -40,6 +40,8 @@ public class Window {
 		glfwDefaultWindowHints();
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+//		glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+//		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 
 		long monitor = glfwGetPrimaryMonitor();
 		GLFWVidMode mode = glfwGetVideoMode(monitor);
@@ -48,11 +50,12 @@ public class Window {
 			throw new RuntimeException("Cannot get video mode");
 		}
 
-		if (SettingsManager.fullScreen) {
+		if (SettingsManager.fullScreen.get()) {
 			handle = glfwCreateWindow(mode.width(), mode.height(), title, monitor, 0);
 		} else {
 			handle = glfwCreateWindow(width, height, title, 0, 0);
 		}
+//		glfwSetWindowOpacity(handle, 0);
 //		glfwSetWindowMonitor(handle, monitor, 0, 0, mode.width(), mode.height(), 0);
 		glfwSetWindowPos(handle, (mode.width() - width) / 2, (mode.height() - height) / 2);
 
@@ -101,8 +104,8 @@ public class Window {
 
 		glfwSetFramebufferSizeCallback(handle, framebufferSizeCallback = new GLFWFramebufferSizeCallback() {
 			public void invoke(long window, int width, int height) {
-				System.out.println("RESIZE");
-				Vulkan.framebufferResize = true;
+//				System.out.println("RESIZE");
+				MainRenderer.framebufferResize = true;
 			}
 		});
 

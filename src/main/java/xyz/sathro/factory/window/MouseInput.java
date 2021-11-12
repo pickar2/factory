@@ -64,7 +64,8 @@ public class MouseInput {
 				rightButtonPressed = button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS;
 
 //				if (action == GLFW_RELEASE) {
-				MouseClickEvent event = new MouseClickEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), mouseButton);
+				final MouseClickEvent.Stage stage = action == GLFW_RELEASE ? MouseClickEvent.Stage.RELEASE : MouseClickEvent.Stage.PRESS;
+				final MouseClickEvent event = new MouseClickEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), mouseButton, stage);
 				EventManager.callEvent(event);
 //				}
 			}

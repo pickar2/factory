@@ -24,6 +24,7 @@ import xyz.sathro.vulkan.models.IBufferObject;
 import xyz.sathro.vulkan.models.VulkanBuffer;
 import xyz.sathro.vulkan.models.VulkanPipeline;
 import xyz.sathro.vulkan.renderer.IRenderer;
+import xyz.sathro.vulkan.utils.CommandBuffers;
 import xyz.sathro.vulkan.utils.VulkanPipelineBuilder;
 import xyz.sathro.vulkan.utils.VulkanUtils;
 import xyz.sathro.vulkan.vertex.IVertex;
@@ -66,9 +67,9 @@ public class TestSceneRenderer implements IRenderer {
 	private TestSceneRenderer() { }
 
 	private VulkanBuffer[] createUniformBuffers(int size) {
-		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImages.size()];
+		VulkanBuffer[] uniformBuffers = new VulkanBuffer[Vulkan.swapChainImageCount];
 
-		for (int i = 0; i < Vulkan.swapChainImages.size(); i++) {
+		for (int i = 0; i < Vulkan.swapChainImageCount; i++) {
 			uniformBuffers[i] = Vulkan.createBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		}
 
@@ -100,7 +101,7 @@ public class TestSceneRenderer implements IRenderer {
 				VulkanUtils.VkCheck(vkBeginCommandBuffer(commandBuffer, beginInfo), "Failed to begin recording command buffer");
 
 				for (VulkanPipeline graphicPipeline : graphicPipelines) {
-					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.pipeline);
+					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffer, offsets);
 					vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -114,7 +115,7 @@ public class TestSceneRenderer implements IRenderer {
 
 				if (octreeVertexCount != -1) {
 					for (VulkanPipeline graphicPipeline : octreePipelines) {
-						vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.pipeline);
+						vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 						vkCmdBindVertexBuffers(commandBuffer, 0, octreeVertexBuffer, offsets);
 
@@ -130,9 +131,9 @@ public class TestSceneRenderer implements IRenderer {
 	}
 
 	private VkCommandBuffer[][] createCommandBuffers() {
-		VkCommandBuffer[] buffers = Vulkan.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImages.size(), commandPool);
+		VkCommandBuffer[] buffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, Vulkan.swapChainImageCount, commandPool);
 
-		VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImages.size()][];
+		VkCommandBuffer[][] commandBuffers = new VkCommandBuffer[Vulkan.swapChainImageCount][];
 		for (int i = 0; i < commandBuffers.length; i++) {
 			commandBuffers[i] = new VkCommandBuffer[] { buffers[i] };
 		}
@@ -142,9 +143,9 @@ public class TestSceneRenderer implements IRenderer {
 
 	private DescriptorPool createDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImages.size())
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Vulkan.swapChainImages.size())
-				.setMaxSets(Vulkan.swapChainImages.size())
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount)
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Vulkan.swapChainImageCount)
+				.setMaxSets(Vulkan.swapChainImageCount)
 				.build();
 	}
 
@@ -157,8 +158,8 @@ public class TestSceneRenderer implements IRenderer {
 
 	private DescriptorPool createOctreeDescriptorPool() {
 		return DescriptorPool.builder()
-				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImages.size())
-				.setMaxSets(Vulkan.swapChainImages.size())
+				.setTypeSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount)
+				.setMaxSets(Vulkan.swapChainImageCount)
 				.build();
 	}
 
@@ -169,7 +170,7 @@ public class TestSceneRenderer implements IRenderer {
 	}
 
 	private List<DescriptorSet> createDescriptorSets() {
-		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImages.size());
+		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
 			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
@@ -187,8 +188,8 @@ public class TestSceneRenderer implements IRenderer {
 				bodiesBufferInfo.buffer(bodiesUniformBuffers[i].buffer);
 
 				descriptorSet.updateBuilder()
-						.addWrite(0).pBufferInfo(cameraBufferInfo).add()
-						.addWrite(1).pBufferInfo(bodiesBufferInfo).add()
+						.write(0).pBufferInfo(cameraBufferInfo).add()
+						.write(1).pBufferInfo(bodiesBufferInfo).add()
 						.update();
 			}
 		}
@@ -197,7 +198,7 @@ public class TestSceneRenderer implements IRenderer {
 	}
 
 	private List<DescriptorSet> createOctreeDescriptorSets() {
-		final List<DescriptorSet> descriptorSets = octreeDescriptorPool.createDescriptorSets(octreeDescriptorSetLayout, Vulkan.swapChainImages.size());
+		final List<DescriptorSet> descriptorSets = octreeDescriptorPool.createDescriptorSets(octreeDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
 			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
@@ -210,7 +211,7 @@ public class TestSceneRenderer implements IRenderer {
 				cameraBufferInfo.buffer(cameraUniformBuffers[i].buffer);
 
 				descriptorSet.updateBuilder()
-						.addWrite(0).pBufferInfo(cameraBufferInfo).add()
+						.write(0).pBufferInfo(cameraBufferInfo).add()
 						.update();
 			}
 		}
