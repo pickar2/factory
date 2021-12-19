@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import lombok.Getter;
 import org.joml.Vector2d;
 import org.joml.Vector2i;
+import org.lwjgl.glfw.GLFW;
 import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.event.annotations.SubscribeEvent;
 import xyz.sathro.factory.ui.components.ActiveUIComponent;
@@ -15,7 +16,6 @@ import xyz.sathro.factory.ui.constraints.SetSizeConstraint;
 import xyz.sathro.factory.ui.font.UIFont;
 import xyz.sathro.factory.ui.vector.UIVector;
 import xyz.sathro.factory.vulkan.renderers.UIRenderer;
-import xyz.sathro.factory.window.MouseButton;
 import xyz.sathro.factory.window.events.MouseClickEvent;
 import xyz.sathro.factory.window.events.MouseMoveEvent;
 import xyz.sathro.factory.window.events.MouseScrollEvent;
@@ -192,7 +192,7 @@ public class Interface {
 				});
 
 				box.setOnClickCallback((component, event) -> {
-					if (event.mouseButton != MouseButton.LEFT) { return; }
+					if ( event.mouseButton != GLFW.GLFW_MOUSE_BUTTON_1) { return; }
 					if (boxBorder.color.equals(color)) {
 						boxBorder.color = getRandomColor();
 					} else {

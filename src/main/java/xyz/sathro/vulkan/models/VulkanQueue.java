@@ -35,10 +35,16 @@ public class VulkanQueue {
 		return flags.contains(Flag.PRESENT);
 	}
 
-	public void submit(VkSubmitInfo.Buffer submitInfo, long fence) {
+	public void submitAndWait(VkSubmitInfo.Buffer submitInfo, long fence) {
 		synchronized (this) {
 			vkQueueSubmit(queue, submitInfo, fence);
 			vkWaitForFences(device, fence, true, UINT64_MAX);
+		}
+	}
+
+	public void submit(VkSubmitInfo.Buffer submitInfo, long fence) {
+		synchronized (this) {
+			vkQueueSubmit(queue, submitInfo, fence);
 		}
 	}
 

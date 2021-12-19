@@ -1,5 +1,11 @@
 package xyz.sathro.vulkan.descriptors;
 
+import it.unimi.dsi.fastutil.ints.Int2IntMap;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import lombok.Getter;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
 import org.lwjgl.vulkan.VkDescriptorPoolCreateInfo;
@@ -10,17 +16,15 @@ import xyz.sathro.vulkan.models.IDisposable;
 import xyz.sathro.vulkan.utils.VulkanUtils;
 
 import java.nio.LongBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
 
 public class DescriptorPool implements IDisposable {
-	private final HashMap<Integer, PoolType> types = new HashMap<>();
-	private int maxSets = 1;
-	private long handle;
+	private final Int2ObjectMap<PoolType> types = new Int2ObjectOpenHashMap<>();
+	@Getter private int maxSets = 1;
+	@Getter private long handle;
 
 	private DescriptorPool() { }
 
@@ -29,15 +33,16 @@ public class DescriptorPool implements IDisposable {
 	}
 
 	public List<DescriptorSet> createDescriptorSets(DescriptorSetLayout layout, int count) {
-		DescriptorSetLayout[] layouts = new DescriptorSetLayout[count];
+		final DescriptorSetLayout[] layouts = new DescriptorSetLayout[count];
 		for (int i = 0; i < count; i++) {
 			layouts[i] = layout;
 		}
+
 		return createDescriptorSets(layouts);
 	}
 
 	public List<DescriptorSet> createDescriptorSets(DescriptorSetLayout... layouts) {
-		final HashMap<Integer, Integer> typesToTake = new HashMap<>();
+		final Int2IntMap typesToTake = new Int2IntOpenHashMap();
 
 		for (DescriptorSetLayout layout : layouts) {
 			for (DescriptorSetLayout.Binding binding : layout.getBindings()) {
@@ -49,8 +54,8 @@ public class DescriptorPool implements IDisposable {
 			}
 		}
 
-		for (Integer type : typesToTake.keySet()) {
-			PoolType poolType = types.get(type);
+		for (int type : typesToTake.keySet()) {
+			final PoolType poolType = types.get(type);
 			if (poolType == null) {
 				throw new IllegalArgumentException("This pool doesn't accept " + DescriptorType.getByCode(type));
 			}
@@ -60,20 +65,20 @@ public class DescriptorPool implements IDisposable {
 			poolType.amountLeft -= typesToTake.get(type);
 		}
 
-		final List<DescriptorSet> descriptorSets = new ArrayList<>();
+		final List<DescriptorSet> descriptorSets = new ObjectArrayList<>();
 		try (MemoryStack stack = stackPush()) {
-			LongBuffer layoutsBuf = stack.mallocLong(layouts.length);
+			final LongBuffer layoutsBuf = stack.mallocLong(layouts.length);
 			for (DescriptorSetLayout layout : layouts) {
 				layoutsBuf.put(layout.getHandle());
 			}
 			layoutsBuf.flip();
 
-			VkDescriptorSetAllocateInfo allocInfo = VkDescriptorSetAllocateInfo.callocStack(stack)
+			final VkDescriptorSetAllocateInfo allocInfo = VkDescriptorSetAllocateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
 					.descriptorPool(handle)
 					.pSetLayouts(layoutsBuf);
 
-			LongBuffer setsBuf = stack.mallocLong(layouts.length);
+			final LongBuffer setsBuf = stack.mallocLong(layouts.length);
 
 			VulkanUtils.VkCheck(VK10.vkAllocateDescriptorSets(Vulkan.device, allocInfo, setsBuf), "Failed to allocate descriptor sets");
 
@@ -90,7 +95,7 @@ public class DescriptorPool implements IDisposable {
 	}
 
 	public void disposeDescriptorSet(DescriptorSet set) {
-		final HashMap<Integer, Integer> typesToTake = new HashMap<>();
+		final Int2IntMap typesToTake = new Int2IntOpenHashMap();
 
 		for (DescriptorSetLayout.Binding binding : set.layout.getBindings()) {
 			if (!typesToTake.containsKey(binding.descriptorType)) {
@@ -100,15 +105,11 @@ public class DescriptorPool implements IDisposable {
 			}
 		}
 
-		for (Integer type : typesToTake.values()) {
+		for (int type : typesToTake.values()) {
 			types.get(type).amountLeft += typesToTake.get(type);
 		}
 
 		vkFreeDescriptorSets(Vulkan.device, handle, set.getHandle());
-	}
-
-	public long getHandle() {
-		return handle;
 	}
 
 	private static class PoolType {
@@ -138,18 +139,18 @@ public class DescriptorPool implements IDisposable {
 
 		public DescriptorPool build() {
 			try (MemoryStack stack = stackPush()) {
-				VkDescriptorPoolSize.Buffer poolSize = VkDescriptorPoolSize.callocStack(types.size(), stack);
+				final VkDescriptorPoolSize.Buffer poolSize = VkDescriptorPoolSize.calloc(types.size(), stack);
 				int i = 0;
 				for (PoolType poolType : types.values()) {
 					poolSize.get(i++).set(poolType.type, poolType.poolSize);
 				}
 
-				VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.callocStack(stack)
+				final VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
 						.sType(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO)
 						.pPoolSizes(poolSize)
 						.maxSets(maxSets);
 
-				LongBuffer longBuf = stack.mallocLong(1);
+				final LongBuffer longBuf = stack.mallocLong(1);
 				VulkanUtils.VkCheck(vkCreateDescriptorPool(Vulkan.device, poolInfo, null, longBuf), "Failed to create descriptor pool");
 				handle = longBuf.get(0);
 			}

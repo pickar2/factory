@@ -180,6 +180,7 @@ public class CombinedBuffer implements IDisposable {
 			return this;
 		}
 
+		// TODO: add ability to add vertex types without indices at all
 		public CombinedBuffer build() {
 			int vertexOffset = 0;
 			final IntList indices = new IntArrayList();

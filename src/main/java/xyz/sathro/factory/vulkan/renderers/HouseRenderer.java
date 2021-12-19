@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.lwjgl.assimp.Assimp.*;
 import static org.lwjgl.glfw.GLFW.glfwGetTime;
+import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK10.*;
@@ -69,18 +70,18 @@ public class HouseRenderer implements IRenderer {
 	private void prepareCommandBuffers() {
 		cbChanged = true;
 		try (MemoryStack stack = stackPush()) {
-			final LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.buffer);
+			final LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.handle);
 			final LongBuffer offsets = stack.longs(0);
 
 			for (int i = 0; i < commandBuffers.length; i++) {
 				final VkCommandBuffer commandBuffer = commandBuffers[i][0];
 
-				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
+				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.calloc(stack)
 						.renderPass(Vulkan.renderPass)
 						.framebuffer(Vulkan.swapChainFramebuffers.getLong(i))
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO);
 
-				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 						.pInheritanceInfo(inheritanceInfo)
 						.flags(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
@@ -91,7 +92,7 @@ public class HouseRenderer implements IRenderer {
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffer, offsets);
-					vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+					vkCmdBindIndexBuffer(commandBuffer, indexBuffer.handle, 0, VK_INDEX_TYPE_UINT32);
 
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 0, stack.longs(descriptorSets.get(i).getHandle()), null);
 
@@ -133,11 +134,11 @@ public class HouseRenderer implements IRenderer {
 		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
-			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(UBO.SIZEOF);
 
-			VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.callocStack(1, stack)
+			VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack)
 					.imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 					.imageView(textureImage.imageView)
 					.sampler(textureSampler);
@@ -145,7 +146,7 @@ public class HouseRenderer implements IRenderer {
 			for (int i = 0; i < descriptorSets.size(); i++) {
 				DescriptorSet descriptorSet = descriptorSets.get(i);
 
-				bufferInfo.buffer(uniformBuffers[i].buffer);
+				bufferInfo.buffer(uniformBuffers[i].handle);
 
 				descriptorSet.updateBuilder()
 						.write(0).pBufferInfo(bufferInfo).add()
@@ -175,7 +176,7 @@ public class HouseRenderer implements IRenderer {
 				.rasterizerDiscardEnable(false)
 				.depthBiasEnable(false);
 
-		final VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.callocStack()
+		final VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.calloc(stackGet())
 				.sType(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO)
 				.sampleShadingEnable(false)
 				.minSampleShading(0.2f)

@@ -4,14 +4,19 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
+import xyz.sathro.factory.Engine;
+import xyz.sathro.factory.event.EventManager;
+import xyz.sathro.factory.test.xpbd.PhysicsCompute;
+import xyz.sathro.factory.util.Maths;
 import xyz.sathro.factory.util.Timer;
-import xyz.sathro.factory.window.MouseInput;
 import xyz.sathro.factory.window.Window;
 import xyz.sathro.vulkan.Vulkan;
+import xyz.sathro.vulkan.events.DrawFrameEvent;
 import xyz.sathro.vulkan.models.Frame;
 import xyz.sathro.vulkan.utils.CommandBuffers;
 import xyz.sathro.vulkan.utils.DisposalQueue;
@@ -30,11 +35,13 @@ import static xyz.sathro.vulkan.Vulkan.*;
 import static xyz.sathro.vulkan.utils.BufferUtils.asPointerBuffer;
 import static xyz.sathro.vulkan.utils.VulkanUtils.VkCheck;
 
+@Log4j2
 public class MainRenderer {
-	public static final int UPDATES_PER_SECOND = 60;
-	public static final double MS_PER_UPDATE = 1000.0 / UPDATES_PER_SECOND;
+	public static final int FRAMES_PER_SECOND = 60;
+	public static final double MS_PER_UPDATE = 1000.0 / FRAMES_PER_SECOND;
 	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
 
+	// TODO: support more than 2 max frames
 	public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
 	private static final List<Frame> inFlightFrames = new ObjectArrayList<>(MAX_FRAMES_IN_FLIGHT);
@@ -57,18 +64,32 @@ public class MainRenderer {
 		createSyncObjects();
 	}
 
-	public static void mainLoop() {
+	public static void renderLoop() {
 		double lag = 0.0;
+		long time;
 		final Timer timer = new Timer();
 
 		while (!Window.shouldClose) {
-			Window.update();
-			GLFW.glfwPollEvents();
-			MouseInput.input();
 
-			lag += timer.getElapsedTime();
+			lag += timer.getElapsedTimeAndReset();
 			if (lag >= MS_PER_UPDATE) {
-				drawFrame(lag * MS_PER_UPDATE_INV);
+				Time.updateTimer();
+
+				Time.lastDeltaTime = lag * MS_PER_UPDATE_INV;
+				Time.lastUnscaledDeltaTime = lag;
+
+				EventManager.callEvent(new DrawFrameEvent(Time.lastDeltaTime));
+
+				time = System.nanoTime();
+				drawFrame(Time.lastDeltaTime);
+				final double fps = Maths.round(1000 / lag, 1);
+				final double frameTime = Maths.round((System.nanoTime() - time) / 1_000_000d, 2);
+				Engine.submitTask(() -> GLFW.glfwSetWindowTitle(Window.handle, Window.title +
+				                                                " FPS: " + Maths.fixedNumberCount(fps, 1) +
+				                                                " Frame time: " + Maths.fixedNumberCount(frameTime, 2) + "ms" +
+				                                                " Compute: " + Maths.fixedNumberCount(PhysicsCompute.list.stream().reduce(0L, Long::sum) / 1_000_000D / PhysicsCompute.list.size(), 2) + "ms")
+				);
+
 				lag = 0;
 			}
 		}
@@ -77,7 +98,7 @@ public class MainRenderer {
 	}
 
 	// TODO: next frame can start writing commands before this frame finishes being presented ?
-	// TODO: renderers (beforeFrame, writeCommandBuffers, afterFrame) can, and should, be processed by multiple threads
+	// TODO: different renderers (beforeFrame, writeCommandBuffers, afterFrame) can, and should, be processed by multiple threads
 	// TODO: vkQueueSubmits must be limited/batched (record all required transfers and do them all in one pass?)
 	// TODO: big renderers can split work into multiple commandBuffers which can be recorded in different threads
 	// TODO: if commandBuffer will most likely change every frame, it should be VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, because caching commands on GPU side can be inefficient

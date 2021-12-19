@@ -17,8 +17,11 @@ import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.util.vma.VmaAllocatorCreateInfo;
 import org.lwjgl.util.vma.VmaVulkanFunctions;
 import org.lwjgl.vulkan.*;
+import xyz.sathro.factory.Engine;
+import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.util.Maths;
 import xyz.sathro.factory.util.ResourceManager;
+import xyz.sathro.vulkan.events.VulkanDisposeEvent;
 import xyz.sathro.vulkan.models.*;
 import xyz.sathro.vulkan.renderer.IRenderer;
 import xyz.sathro.vulkan.renderer.MainRenderer;
@@ -47,16 +50,16 @@ import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.EXTValidationFeatures.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
+import static org.lwjgl.vulkan.KHRSynchronization2.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK11.VK_API_VERSION_1_1;
-import static org.lwjgl.vulkan.VK11.vkEnumerateInstanceVersion;
+import static org.lwjgl.vulkan.VK11.*;
 import static xyz.sathro.factory.Engine.debugMode;
 import static xyz.sathro.factory.util.Maths.clamp;
 import static xyz.sathro.factory.window.Window.handle;
 import static xyz.sathro.vulkan.utils.VulkanUtils.*;
 
 public class Vulkan {
-	private static final Logger logger = LogManager.getLogger(Vulkan.class);
+	private static final Logger log = LogManager.getLogger(Vulkan.class);
 
 	public static final long UINT64_MAX = 0xFFFFFFFFFFFFFFFFL;
 	public static final int UINT32_MAX = 0xFFFFFFFF;
@@ -69,11 +72,12 @@ public class Vulkan {
 
 	public static final Set<String> INSTANCE_EXTENSIONS = new HashSet<>();
 	public static final Set<String> DEVICE_EXTENSIONS = Stream.of(
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			"VK_KHR_synchronization2"
 	).collect(toSet());
 	public static final Set<String> VALIDATION_LAYERS = Stream.of(
-			"VK_LAYER_KHRONOS_validation",
-			"VK_LAYER_LUNARG_monitor"
+			"VK_LAYER_KHRONOS_validation"
+//			"VK_LAYER_KHRONOS_synchronization2"
 	).collect(toSet());
 	public static final VkInstance instance;
 	public static final VkDevice device;
@@ -110,8 +114,7 @@ public class Vulkan {
 	static {
 		if (debugMode) {
 			suppressedDebugMessageIDs = new IntOpenHashSet();
-			suppressedDebugMessageIDs.add(0); // Invalid layer manifest file version 1.2.0. MAY SUPPRESS OTHER VALID MESSAGES
-			suppressedDebugMessageIDs.add(0x2dc65ef4); // informs that debug extensions should not be used in prod
+			suppressedDebugMessageIDs.add(0x822806fa); // informs that debug extensions should not be used in production
 
 			debugCallback = new VkDebugUtilsMessengerCallbackEXT() {
 				@Override
@@ -119,7 +122,7 @@ public class Vulkan {
 					final VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
 
 					if (!suppressedDebugMessageIDs.contains(data.messageIdNumber())) {
-						logger.warn(("[VULKAN] " + data.pMessageString()));
+						log.warn(("[VULKAN] " + data.pMessageString()));
 					}
 
 					return 0;
@@ -349,7 +352,12 @@ public class Vulkan {
 				final VkPhysicalDeviceFeatures supportedFeatures = VkPhysicalDeviceFeatures.malloc(stack);
 				vkGetPhysicalDeviceFeatures(device, supportedFeatures);
 
+//				final VkPhysicalDeviceFeatures2 features2 = VkPhysicalDeviceFeatures2.malloc(stack);
+//				vkGetPhysicalDeviceFeatures2(device, features2);
+//				features2.
+
 				anisotropySupported = supportedFeatures.samplerAnisotropy();
+//				synchronization2 = supportedFeatures.
 			}
 		}
 
@@ -429,13 +437,24 @@ public class Vulkan {
 					.fragmentStoresAndAtomics(true)
 					.vertexPipelineStoresAndAtomics(true)
 					.sampleRateShading(msaaEnabled)
-					.fillModeNonSolid(true);
+					.fillModeNonSolid(true)
+					.shaderFloat64(true);
+
+			VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2 = VkPhysicalDeviceSynchronization2FeaturesKHR.calloc(stack)
+					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR)
+					.synchronization2(true);
+
+			VkPhysicalDeviceFeatures2 deviceFeatures2 = VkPhysicalDeviceFeatures2.calloc(stack)
+					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
+					.features(deviceFeatures);
 
 			final VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
 					.pQueueCreateInfos(queueCreateInfos)
-					.pEnabledFeatures(deviceFeatures)
+					.pNext(deviceFeatures2)
 					.ppEnabledExtensionNames(BufferUtils.asPointerBuffer(DEVICE_EXTENSIONS));
+
+			deviceFeatures2.pNext(synchronization2);
 
 			if (debugMode) {
 				createInfo.ppEnabledLayerNames(BufferUtils.asPointerBuffer(VALIDATION_LAYERS));
@@ -610,6 +629,7 @@ public class Vulkan {
 	}
 
 	public static VulkanBuffer createBuffer(int size, int usage, int memoryUsage) {
+		if (size == 0) { throw new RuntimeException("Cannot allocate buffer with size 0"); }
 		final VulkanBuffer buffer = new VulkanBuffer();
 		try (MemoryStack stack = stackPush()) {
 			final VkBufferCreateInfo bufferInfo = VkBufferCreateInfo.calloc(stack)
@@ -624,11 +644,21 @@ public class Vulkan {
 			VkCheck(vmaCreateBuffer(vmaAllocator, bufferInfo, VmaAllocationCreateInfo.calloc(stack).usage(memoryUsage), longBuffer, pointerBuffer, null),
 			        "Failed to allocate buffer");
 
-			buffer.buffer = longBuffer.get(0);
+			buffer.handle = longBuffer.get(0);
 			buffer.allocation = pointerBuffer.get(0);
 		}
 
 		return buffer;
+	}
+
+	public static VulkanBuffer[] createUniformBuffers(int size, int count) {
+		final VulkanBuffer[] uniformBuffers = new VulkanBuffer[count];
+
+		for (int i = 0; i < count; i++) {
+			uniformBuffers[i] = createBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		}
+
+		return uniformBuffers;
 	}
 
 	private static void copyBufferToImage(long buffer, VulkanImage vulkanImage) {
@@ -651,13 +681,13 @@ public class Vulkan {
 		}
 	}
 
-	private static void copyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, long size) {
+	public static void copyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, long size) {
 		try (MemoryStack stack = stackPush();
 		     DefaultCommandPool commandPool = DefaultCommandPools.takeTransferPool()) {
 			final VkCommandBuffer commandBuffer = CommandBuffers.beginSingleTimeCommands(commandPool.handle, stack);
 			final VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack).size(size);
 
-			vkCmdCopyBuffer(commandBuffer, srcBuffer.buffer, dstBuffer.buffer, copyRegion);
+			vkCmdCopyBuffer(commandBuffer, srcBuffer.handle, dstBuffer.handle, copyRegion);
 
 			CommandBuffers.endSingleTimeCommands(commandBuffer, commandPool.handle, commandPool.fence, queues.transfer, stack);
 		}
@@ -863,7 +893,7 @@ public class Vulkan {
 
 		MainRenderer.init(renderers);
 
-		logger.info("VULKAN READY");
+		log.info("VULKAN READY");
 	}
 
 	public static void cleanup() {
@@ -901,6 +931,8 @@ public class Vulkan {
 		glfwDestroyWindow(handle);
 
 		glfwTerminate();
+
+		EventManager.callEvent(new VulkanDisposeEvent());
 	}
 
 	public static long createCommandPool(int flags, VulkanQueue queue) {
@@ -970,7 +1002,7 @@ public class Vulkan {
 			textureImage.height = height;
 
 			transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, textureImage.mipLevels);
-			copyBufferToImage(stagingBuffer.buffer, textureImage);
+			copyBufferToImage(stagingBuffer.handle, textureImage);
 
 			stagingBuffer.dispose();
 
@@ -1175,7 +1207,7 @@ public class Vulkan {
 		}
 	}
 
-	public static VulkanBuffer createVertexBufferFromStream(Stream<IVertex> vertices, int bufferSize) {
+	public static VulkanBuffer createVertexBufferFromStream(Stream<? extends IVertex> vertices, int bufferSize) {
 		return putDataIntoGPUOnlyBuffer(buffer -> vertices.forEach(vertex -> vertex.get(buffer)), bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	}
 
@@ -1211,7 +1243,7 @@ public class Vulkan {
 		mapDataToVulkanBuffer(bufferObject::get, vulkanBuffer, bufferObject.sizeof());
 	}
 
-	public static VulkanBuffer createVertexBuffer(List<IVertex> vertices) {
+	public static VulkanBuffer createVertexBuffer(List<? extends IVertex> vertices) {
 		return createVertexBufferFromStream(vertices.stream(), vertices.get(0).sizeof() * vertices.size());
 	}
 
@@ -1328,10 +1360,13 @@ public class Vulkan {
 			final IntBuffer width = stack.ints(0);
 			final IntBuffer height = stack.ints(0);
 
-			while (width.get(0) == 0 && height.get(0) == 0) {
-				glfwGetFramebufferSize(handle, width, height);
-				glfwWaitEvents();
-			}
+			Engine.submitTaskAndWait(() -> {
+				log.info("Submitting task");
+				while (width.get(0) == 0 && height.get(0) == 0) {
+					glfwGetFramebufferSize(handle, width, height);
+					glfwPollEvents();
+				}
+			});
 		}
 		vkDeviceWaitIdle(device);
 

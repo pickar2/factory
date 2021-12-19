@@ -3,33 +3,102 @@
  */
 package xyz.sathro.factory;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import lombok.extern.log4j.Log4j2;
 import org.lwjgl.system.Configuration;
-import xyz.sathro.factory.vulkan.renderers.HouseRenderer;
+import xyz.sathro.factory.event.EventManager;
+import xyz.sathro.factory.util.Timer;
+import xyz.sathro.factory.vulkan.scene.SceneRenderer;
 import xyz.sathro.factory.window.MouseInput;
 import xyz.sathro.factory.window.Window;
+import xyz.sathro.factory.window.events.GameUpdateEvent;
 import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.renderer.MainRenderer;
 
 import java.lang.reflect.Field;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 
+@Log4j2
 public class Engine {
-	private static final Logger logger = LogManager.getLogger(Engine.class);
+	public static final int UPDATES_PER_SECOND = 60;
+	public static final double MS_PER_UPDATE = 1000.0 / UPDATES_PER_SECOND;
+	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
+
+	private static final Queue<Runnable> taskQueue = new LinkedList<>();
+	private static final Map<Object, Runnable> waitTaskMap = new Object2ObjectOpenHashMap<>();
+
+	private static final Thread renderThread = new Thread(Engine::render);
+
 	public static boolean debugMode = false;
 
+	private static void render() {
+		MainRenderer.renderLoop();
+	}
+
+	private static void updateLoop() {
+		double lag = 0.0;
+		final Timer timer = new Timer();
+
+		while (!Window.shouldClose) {
+			synchronized (taskQueue) {
+				while (!taskQueue.isEmpty()) {
+					taskQueue.poll().run();
+				}
+			}
+			synchronized (waitTaskMap) {
+				final Iterator<Map.Entry<Object, Runnable>> iterator = waitTaskMap.entrySet().iterator();
+				while (iterator.hasNext()) {
+					final Map.Entry<Object, Runnable> entry = iterator.next();
+
+					entry.getValue().run();
+					synchronized (entry.getKey()) {
+						entry.getKey().notify();
+					}
+
+					iterator.remove();
+				}
+			}
+			Window.update();
+
+			lag += timer.getElapsedTimeAndReset();
+			if (lag >= MS_PER_UPDATE) {
+				EventManager.callEvent(new GameUpdateEvent(lag * MS_PER_UPDATE_INV));
+
+				lag -= MS_PER_UPDATE;
+			}
+		}
+	}
+
+	public static void submitTask(Runnable runnable) {
+		synchronized (taskQueue) {
+			taskQueue.add(runnable);
+		}
+	}
+
+	@SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
+	public static void submitTaskAndWait(Runnable runnable) {
+		final Object sync = new Object();
+		synchronized (waitTaskMap) {
+			waitTaskMap.put(sync, runnable);
+		}
+		try {
+			synchronized (sync) {
+				sync.wait();
+			}
+		} catch (InterruptedException ignored) { }
+	}
+
 	@SuppressWarnings("unchecked")
-	public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException, ClassNotFoundException {
-		logger.info("START");
+	public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException, ClassNotFoundException, InterruptedException {
+		log.info("START");
 
 		if (args.length > 0) {
 			debugMode = Boolean.parseBoolean(args[0]);
 		}
 
 		if (debugMode) {
-			logger.info("ENABLED DEBUG MODE");
+			log.info("ENABLED DEBUG MODE");
 
 			Configuration.DEBUG_MEMORY_ALLOCATOR.set(true);
 			Configuration.DEBUG_STACK.set(true);
@@ -38,8 +107,12 @@ public class Engine {
 		try {
 			Window.init();
 			MouseInput.init();
-			Vulkan.initVulkan(List.of(HouseRenderer.INSTANCE));
-			MainRenderer.mainLoop();
+			Vulkan.initVulkan(List.of(SceneRenderer.INSTANCE));
+
+			renderThread.setName("render");
+			renderThread.start();
+			updateLoop();
+			renderThread.join();
 
 			Vulkan.cleanup();
 			MouseInput.cleanup();
@@ -64,6 +137,6 @@ public class Engine {
 			throw e;
 		}
 
-		logger.info("END");
+		log.info("END");
 	}
 }

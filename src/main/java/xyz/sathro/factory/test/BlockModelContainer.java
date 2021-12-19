@@ -48,9 +48,9 @@ public class BlockModelContainer {
 		this.blockCount = blocksPerSide * blocksPerSide * blocksPerSide;
 		this.blocks = new BlockModelContainer[blockCount];
 
-		this.outerQuads = new TexturedQuad[Side.values().length][];
-		this.innerQuads = new TexturedQuad[Side.values().length][];
-		this.maskQuads = new TexturedQuad[Side.values().length][];
+		this.outerQuads = new TexturedQuad[SideNew.values().length][];
+		this.innerQuads = new TexturedQuad[SideNew.values().length][];
+		this.maskQuads = new TexturedQuad[SideNew.values().length][];
 	}
 
 	private BlockModelContainer(int divisionLevel, BlockModelContainer[] blocks) {
@@ -69,12 +69,12 @@ public class BlockModelContainer {
 		texture.id = 42;
 		UnitBlockModelContainer unit = new UnitBlockModelContainer();
 		UnitBlockModelContainer unit_bottom = new UnitBlockModelContainer();
-		unit.setSideTexture(Side.TOP, texture);
-		unit.setSideTexture(Side.BOTTOM, texture);
-		unit.setSideTexture(Side.LEFT, texture);
-		unit.setSideTexture(Side.RIGHT, texture);
-		unit.setSideTexture(Side.FRONT, texture);
-		unit.setSideTexture(Side.BACK, texture);
+		unit.setSideTexture(SideNew.TOP, texture);
+		unit.setSideTexture(SideNew.BOTTOM, texture);
+		unit.setSideTexture(SideNew.LEFT, texture);
+		unit.setSideTexture(SideNew.RIGHT, texture);
+		unit.setSideTexture(SideNew.FRONT, texture);
+		unit.setSideTexture(SideNew.BACK, texture);
 
 //		unit_bottom.setSideTexture(Side.BOTTOM, texture);
 
@@ -132,7 +132,7 @@ public class BlockModelContainer {
 	public BlockModelContainer copy() {
 		final BlockModelContainer copy = new BlockModelContainer(divisionLevel, blocks);
 		copy.deepness = this.deepness;
-		for (int i = 0; i < Side.values().length; i++) {
+		for (int i = 0; i < SideNew.values().length; i++) {
 			if (this.outerQuads[i] != null && this.outerQuads[i].length > 0) {
 				copy.outerQuads[i] = new TexturedQuad[this.outerQuads[i].length];
 				System.arraycopy(this.outerQuads[i], 0, copy.outerQuads[i], 0, this.outerQuads[i].length);
@@ -151,7 +151,7 @@ public class BlockModelContainer {
 		return copy;
 	}
 
-	public List<TexturedQuad> greedyMesh(TexturedQuad[][] allQuads, Side side, TexturedQuad.CompatibilityFunction compatibilityFunction) {
+	public List<TexturedQuad> greedyMesh(TexturedQuad[][] allQuads, SideNew side, TexturedQuad.CompatibilityFunction compatibilityFunction) {
 		final List<TexturedQuad> quads = new ObjectArrayList<>();
 		int n, w, h;
 
@@ -336,7 +336,7 @@ public class BlockModelContainer {
 	}
 
 	public TexturedQuad[][][] getMaskQuads(int offsetX, int offsetY, int offsetZ) {
-		final TexturedQuad[][][] maskQuads = new TexturedQuad[Side.values().length][blockCount][];
+		final TexturedQuad[][][] maskQuads = new TexturedQuad[SideNew.values().length][blockCount][];
 		BlockModelContainer block;
 		int index = 0;
 		for (int z = 0; z < blocksPerSide; z++) {
@@ -347,7 +347,7 @@ public class BlockModelContainer {
 						if (block.isDirty()) {
 							block.makeQuads(offsetX + offset(x), offsetY + offset(y), offsetZ + offset(z));
 						}
-						for (int i = 0; i < Side.values().length; i++) {
+						for (int i = 0; i < SideNew.values().length; i++) {
 							maskQuads[i][index] = new TexturedQuad[block.maskQuads[i].length];
 							System.arraycopy(block.maskQuads[i], 0, maskQuads[i][index], 0, block.maskQuads[i].length);
 						}
@@ -368,7 +368,7 @@ public class BlockModelContainer {
 		for (int z = 0; z < blocksPerSide; z++) {
 			for (int y = 0; y < blocksPerSide; y++) {
 				for (int x = 0; x < blocksPerSide; x++) {
-					for (Side side : Side.values()) {
+					for (SideNew side : SideNew.values()) {
 						quadArray = maskQuads[side.ordinal()][index];
 						if (quadArray == null || quadArray.length <= 0) { continue; }
 						newX = x + side.x;
@@ -408,14 +408,14 @@ public class BlockModelContainer {
 	}
 
 	public TexturedQuad[][][] combineQuads(TexturedQuad[][][] processedQuads) {
-		final TexturedQuad[][][] combinedQuads = new TexturedQuad[Side.values().length][blockCount][];
+		final TexturedQuad[][][] combinedQuads = new TexturedQuad[SideNew.values().length][blockCount][];
 		int length, writeIndex;
 		BlockModelContainer block;
 		TexturedQuad[] quadArray, quadArray2;
 		for (int index = 0; index < blocks.length; index++) {
 			block = blocks[index];
 			if (block == null) { continue; }
-			for (Side side : Side.values()) {
+			for (SideNew side : SideNew.values()) {
 				length = 0;
 				quadArray = block.outerQuads[side.ordinal()];
 				if (quadArray != null) { length += quadArray.length; }
@@ -450,7 +450,7 @@ public class BlockModelContainer {
 		final int[] maxQuadStart = new int[] { offsetX + quadStart, offsetY + quadStart, offsetZ + quadStart };
 		final int[] maxQuadEnd = new int[] { offsetX + quadEnd, offsetY + quadEnd, offsetZ + quadEnd };
 
-		for (final Side side : Side.values()) {
+		for (final SideNew side : SideNew.values()) {
 			inner.clear();
 			outer.clear();
 			mask.clear();

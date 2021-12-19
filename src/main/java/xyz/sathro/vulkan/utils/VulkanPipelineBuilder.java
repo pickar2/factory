@@ -1,5 +1,6 @@
 package xyz.sathro.vulkan.utils;
 
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.descriptors.DescriptorSetLayout;
@@ -24,6 +25,7 @@ public class VulkanPipelineBuilder {
 	private boolean depthBuffer = true;
 
 	// TODO: change vertexInstance to some IVertexFabric?
+	// TODO: abstraction for materials, 1 pipeline = 1+ materials = 1 vertexType ?= uber shader
 	public VulkanPipelineBuilder(String[] vertShaderPaths, String[] fragShaderPaths, IVertex vertexInstance, DescriptorSetLayout[] descriptorSetLayouts) {
 		vertShaders = new long[vertShaderPaths.length];
 		for (int i = 0; i < vertShaderPaths.length; i++) {
@@ -88,6 +90,7 @@ public class VulkanPipelineBuilder {
 	// TODO: Move defaults in one place.
 	// TODO: Provide ability to change all required structures.
 	// TODO: By default it should create just one pipeline without depth stencil.
+	// TODO: replace vertex instance by just class and get vertexInfo from somewhere
 	public VulkanPipeline[] build() {
 		VulkanPipeline[] pipelines = new VulkanPipeline[2];
 
@@ -105,7 +108,7 @@ public class VulkanPipelineBuilder {
 					.depthBiasEnable(false);
 		}
 
-		VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.callocStack()
+		VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.calloc(MemoryStack.stackGet())
 				.sType(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO)
 				.sampleShadingEnable(false)
 				.minSampleShading(0.2f)

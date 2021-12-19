@@ -7,19 +7,13 @@ plugins {
 
 switch (OperatingSystem.current()) {
 	case OperatingSystem.LINUX:
-		def osArch = System.getProperty("os.arch")
-		project.ext.lwjglNatives = osArch.startsWith("arm") || osArch.startsWith("aarch64")
-			? "natives-linux-${osArch.contains("64") || osArch.startsWith("armv8") ? "arm64" : "arm32"}"
-			: "natives-linux"
+		project.ext.lwjglNatives = "natives-linux"
 		break
 	case OperatingSystem.MAC_OS:
-		project.ext.lwjglNatives = natives-macos
+		project.ext.lwjglNatives = "natives-macos"
 		break
 	case OperatingSystem.WINDOWS:
-		def osArch = System.getProperty("os.arch")
-		project.ext.lwjglNatives = osArch.contains("64")
-			? "natives-windows${osArch.startsWith("aarch64") ? "-arm64" : ""}"
-			: "natives-windows-x86"
+		project.ext.lwjglNatives = "natives-windows"
 		break
 }
 
@@ -62,6 +56,8 @@ dependencies {
 	implementation "org.lwjgl:lwjgl-stb"
 	implementation "org.lwjgl:lwjgl-vma"
 	implementation "org.lwjgl:lwjgl-vulkan"
+	implementation "org.lwjgl:lwjgl-meshoptimizer"
+
 	runtimeOnly "org.lwjgl:lwjgl::$lwjglNatives"
 	runtimeOnly "org.lwjgl:lwjgl-assimp::$lwjglNatives"
 	runtimeOnly "org.lwjgl:lwjgl-glfw::$lwjglNatives"
@@ -70,6 +66,7 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-shaderc::$lwjglNatives"
 	runtimeOnly "org.lwjgl:lwjgl-stb::$lwjglNatives"
 	runtimeOnly "org.lwjgl:lwjgl-vma::$lwjglNatives"
+	runtimeOnly "org.lwjgl:lwjgl-meshoptimizer::$lwjglNatives"
 	if (lwjglNatives as String == "natives-macos") runtimeOnly "org.lwjgl:lwjgl-vulkan::$lwjglNatives"
 
 	implementation "org.joml:joml:$jomlVersion"
@@ -122,4 +119,8 @@ task fatJar(type: Jar) {
 	manifest {
 		attributes("Main-Class": "$mainClass")
 	}
+}
+
+tasks.withType(JavaCompile) {
+    options.deprecation = true
 }

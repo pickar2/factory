@@ -88,19 +88,19 @@ public class UIRenderer implements IRenderer {
 	private void prepareCommandBuffers() {
 		cbChanged = true;
 		try (MemoryStack stack = stackPush()) {
-			final LongBuffer quadVertexBuffer = stack.longs(this.quadCombinedBuffer.getVertexBuffer().buffer);
+			final LongBuffer quadVertexBuffer = stack.longs(this.quadCombinedBuffer.getVertexBuffer().handle);
 			final LongBuffer vertexOffsets = stack.longs(0);
 			final IntBuffer dataOffsets = stack.ints(0);
 
 			for (int cbIndex = 0; cbIndex < commandBuffers.length; cbIndex++) {
 				final VkCommandBuffer commandBuffer = commandBuffers[cbIndex][0];
 
-				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
+				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.calloc(stack)
 						.renderPass(Vulkan.renderPass)
 						.framebuffer(Vulkan.swapChainFramebuffers.getLong(cbIndex))
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO);
 
-				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 						.pInheritanceInfo(inheritanceInfo)
 						.flags(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
@@ -122,7 +122,7 @@ public class UIRenderer implements IRenderer {
 					int dataSetIndex = 0;
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, quadVertexBuffer, vertexOffsets);
-					vkCmdBindIndexBuffer(commandBuffer, quadCombinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+					vkCmdBindIndexBuffer(commandBuffer, quadCombinedBuffer.getIndexBuffer().handle, 0, VK_INDEX_TYPE_UINT32);
 					for (BasicUIComponent component : quadComponentList) {
 						// FIXME: now if textureID changed to be outside of its previous set things won't work well
 						if (component.hasTexture && (component.textureID < firstTextureID || component.textureID >= lastTextureID)) {
@@ -151,8 +151,8 @@ public class UIRenderer implements IRenderer {
 					}
 
 					if (!nonQuadComponentList.isEmpty()) {
-						vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(this.combinedBuffer.getVertexBuffer().buffer), vertexOffsets);
-						vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+						vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(this.combinedBuffer.getVertexBuffer().handle), vertexOffsets);
+						vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().handle, 0, VK_INDEX_TYPE_UINT32);
 						MutableVertexData vertexData;
 						for (BasicUIComponent component : nonQuadComponentList) {
 							if (component.hasTexture && (component.textureID < firstTextureID || component.textureID >= lastTextureID)) {
@@ -203,12 +203,12 @@ public class UIRenderer implements IRenderer {
 		final List<DescriptorSet> descriptorSets = matrixDescriptorPool.createDescriptorSets(matrixDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
-			final VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			final VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(VK_WHOLE_SIZE);
 
 			for (int i = 0; i < descriptorSets.size(); i++) {
-				cameraBufferInfo.buffer(matrixUniformBuffers[i].buffer);
+				cameraBufferInfo.buffer(matrixUniformBuffers[i].handle);
 
 				descriptorSets.get(i).updateBuilder()
 						.write(0).pBufferInfo(cameraBufferInfo).add()
@@ -239,12 +239,12 @@ public class UIRenderer implements IRenderer {
 			final List<DescriptorSet> currentSets = dataDescriptorPool.createDescriptorSets(dataDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 			try (MemoryStack stack = stackPush()) {
-				final VkDescriptorBufferInfo.Buffer uiObjectsBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+				final VkDescriptorBufferInfo.Buffer uiObjectsBufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 						.offset(0)
 						.range(VK_WHOLE_SIZE);
 
 				for (int imageIndex = 0; imageIndex < currentSets.size(); imageIndex++) {
-					uiObjectsBufferInfo.buffer(dataUniformBuffers[setIndex][imageIndex].buffer);
+					uiObjectsBufferInfo.buffer(dataUniformBuffers[setIndex][imageIndex].handle);
 
 					currentSets.get(imageIndex).updateBuilder()
 							.write(0).pBufferInfo(uiObjectsBufferInfo).add()
@@ -410,7 +410,8 @@ public class UIRenderer implements IRenderer {
 					}
 				}
 			}
-			int newTextureSetCount = Math.max(1, ceilDiv(textureToIDMap.size(), maxTexturesPerSet));
+
+			final int newTextureSetCount = Math.max(1, ceilDiv(textureToIDMap.size(), maxTexturesPerSet));
 			if (textureSetCount != newTextureSetCount) {
 				dirty = true;
 				textureSetCount = newTextureSetCount;

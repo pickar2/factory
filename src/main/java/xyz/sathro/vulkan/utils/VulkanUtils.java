@@ -105,7 +105,12 @@ public class VulkanUtils {
 			throw new RuntimeException("Failed to create shader compiler");
 		}
 
-		long result = shaderc_compile_into_spv(shaderCompilerHandle, source, vulkanStageToShadercKind(vulkanStage), path, "main", NULL);
+		final long options = shaderc_compile_options_initialize();
+
+		shaderc_compile_options_set_optimization_level(options, shaderc_optimization_level_performance);
+		shaderc_compile_options_set_generate_debug_info(options);
+
+		long result = shaderc_compile_into_spv(shaderCompilerHandle, source, vulkanStageToShadercKind(vulkanStage), path, "main", options);
 		if (result == NULL) {
 			throw new RuntimeException("Failed to compile shader " + path + " into SPIR-V");
 		}

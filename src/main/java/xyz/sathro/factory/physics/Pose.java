@@ -1,5 +1,6 @@
 package xyz.sathro.factory.physics;
 
+import lombok.Getter;
 import lombok.ToString;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -8,6 +9,7 @@ import org.joml.Vector3d;
 
 @ToString
 public class Pose {
+	@Getter
 	public Vector3d position;
 	public Quaterniond rotation;
 

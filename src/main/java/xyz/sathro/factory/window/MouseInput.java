@@ -1,7 +1,6 @@
 package xyz.sathro.factory.window;
 
 import org.joml.Vector2d;
-import org.joml.Vector2f;
 import org.joml.Vector2i;
 import org.lwjgl.glfw.GLFWCursorEnterCallback;
 import org.lwjgl.glfw.GLFWCursorPosCallback;
@@ -19,9 +18,6 @@ public class MouseInput {
 	private static final Vector2d previousPos = new Vector2d(0, 0);
 	private static final Vector2d currentPos = new Vector2d(0, 0);
 
-	private static final Vector2f displVec = new Vector2f();
-	public static boolean first = true;
-	private static boolean inWindow = false;
 	private static boolean leftButtonPressed = false;
 	private static boolean rightButtonPressed = false;
 	private static GLFWCursorPosCallback cursorPosCallback;
@@ -31,23 +27,31 @@ public class MouseInput {
 	private static GLFWScrollCallback scrollCallback;
 
 	public static void init() {
+		double[] xPos = new double[1];
+		double[] yPos = new double[1];
+
+		glfwGetCursorPos(Window.handle, xPos, yPos);
+		previousPos.set(xPos[0], yPos[0]);
+		currentPos.set(xPos[0], yPos[0]);
+
 		glfwSetCursorPosCallback(Window.handle, cursorPosCallback = new GLFWCursorPosCallback() {
 			@Override
 			public void invoke(long window, double xPos, double yPos) {
-				if (leftButtonPressed || rightButtonPressed) {
-					MouseButton button = leftButtonPressed ? MouseButton.LEFT : MouseButton.RIGHT;
-					EventManager.callEvent(new MouseDragEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), new Vector2i((int) (xPos - currentPos.x), (int) (yPos - currentPos.y)), button));
+				if (leftButtonPressed) {
+					EventManager.callEvent(new MouseDragEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), new Vector2i((int) (xPos - currentPos.x), (int) (yPos - currentPos.y)), GLFW_MOUSE_BUTTON_1));
 				}
+				previousPos.set(currentPos);
+
 				currentPos.x = xPos;
 				currentPos.y = yPos;
-				EventManager.callEvent(new MouseMoveEvent(new Vector2i((int) xPos, (int) yPos)));
+
+				EventManager.callEvent(new MouseMoveEvent(new Vector2i((int) xPos, (int) yPos), new Vector2i((int) (previousPos.x - currentPos.x), (int) (previousPos.y - currentPos.y))));
 			}
 		});
 		glfwSetCursorEnterCallback(Window.handle, cursorEnterCallback = new GLFWCursorEnterCallback() {
 			@Override
 			public void invoke(long window, boolean entered) {
-				inWindow = entered;
-				if (Window.cursorGrabbed && glfwGetInputMode(Window.handle, GLFW_CURSOR) == GLFW_CURSOR_NORMAL && glfwGetWindowAttrib(Window.handle, GLFW_HOVERED) == GLFW_TRUE) {
+				if (Window.isCursorGrabbed() && glfwGetInputMode(Window.handle, GLFW_CURSOR) == GLFW_CURSOR_NORMAL && glfwGetWindowAttrib(Window.handle, GLFW_HOVERED) == GLFW_TRUE) {
 					glfwSetInputMode(Window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 				}
 //				if (!Window.cursorGrabbed && !Window.isKeyPressed(GLFW_KEY_LEFT_ALT) && glfwGetWindowAttrib(Window.handle, GLFW_HOVERED) == GLFW_TRUE && glfwGetWindowAttrib(Window.handle, GLFW_FOCUSED) == GLFW_TRUE) {
@@ -59,13 +63,13 @@ public class MouseInput {
 		glfwSetMouseButtonCallback(Window.handle, cursorMouseButtonCallback = new GLFWMouseButtonCallback() {
 			@Override
 			public void invoke(long window, int button, int action, int mode) {
-				MouseButton mouseButton = leftButtonPressed ? MouseButton.LEFT : MouseButton.RIGHT;
+//				MouseButton mouseButton = leftButtonPressed ? MouseButton.BUTTON_1 : MouseButton.BUTTON_2;
 				leftButtonPressed = button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS;
 				rightButtonPressed = button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS;
 
 //				if (action == GLFW_RELEASE) {
 				final MouseClickEvent.Stage stage = action == GLFW_RELEASE ? MouseClickEvent.Stage.RELEASE : MouseClickEvent.Stage.PRESS;
-				final MouseClickEvent event = new MouseClickEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), mouseButton, stage);
+				final MouseClickEvent event = new MouseClickEvent(new Vector2i((int) currentPos.x, (int) currentPos.y), button, stage);
 				EventManager.callEvent(event);
 //				}
 			}
@@ -78,41 +82,10 @@ public class MouseInput {
 		});
 	}
 
-	public static Vector2f getDisplVec() {
-		return displVec;
-	}
-
-	public static void input() {
-		displVec.set(0);
-		if (inWindow) {
-			double deltax = currentPos.x - previousPos.x;
-			double deltay = currentPos.y - previousPos.y;
-			if (deltax != 0 && !first) {
-				displVec.y = (float) deltax;
-			}
-			if (deltay != 0 && !first) {
-				displVec.x = (float) deltay;
-			}
-			if ((deltax != 0 || deltay != 0) && first) {
-				first = false;
-			}
-		}
-		previousPos.x = currentPos.x;
-		previousPos.y = currentPos.y;
-	}
-
 	public static void cleanup() {
 		cursorPosCallback.free();
 		cursorEnterCallback.free();
 		cursorMouseButtonCallback.free();
 		scrollCallback.free();
-	}
-
-	public static boolean isLeftButtonPressed() {
-		return leftButtonPressed;
-	}
-
-	public static boolean isRightButtonPressed() {
-		return rightButtonPressed;
 	}
 }

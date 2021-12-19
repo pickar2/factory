@@ -19,12 +19,12 @@ public class CommandBuffers {
 	public static void endSingleTimeCommands(VkCommandBuffer commandBuffer, long commandPoolHandle, VulkanQueue queue, MemoryStack stack) {
 		vkEndCommandBuffer(commandBuffer);
 
-		final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.callocStack(1, stack)
+		final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
 				.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 				.pCommandBuffers(stack.pointers(commandBuffer));
 
 		final long fence = Vulkan.createDefaultFence(false); // TODO: reuse fences
-		queue.submit(submitInfo, fence);
+		queue.submitAndWait(submitInfo, fence);
 
 		vkDestroyFence(Vulkan.device, fence, null);
 
@@ -34,12 +34,12 @@ public class CommandBuffers {
 	public static void endSingleTimeCommands(VkCommandBuffer commandBuffer, long commandPoolHandle, long fence, VulkanQueue queue, MemoryStack stack) {
 		vkEndCommandBuffer(commandBuffer);
 
-		final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.callocStack(1, stack)
+		final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
 				.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 				.pCommandBuffers(stack.pointers(commandBuffer));
 
 		vkResetFences(Vulkan.device, fence);
-		queue.submit(submitInfo, fence);
+		queue.submitAndWait(submitInfo, fence);
 
 		vkFreeCommandBuffers(Vulkan.device, commandPoolHandle, commandBuffer);
 	}
@@ -47,7 +47,7 @@ public class CommandBuffers {
 	public static VkCommandBuffer beginSingleTimeCommands(long commandPoolHandle, MemoryStack stack) {
 		final VkCommandBuffer commandBuffer = createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPoolHandle);
 
-		final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+		final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 				.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO)
 				.flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -63,7 +63,7 @@ public class CommandBuffers {
 
 			final PointerBuffer pCommandBuffer = stack.mallocPointer(commandBuffers.length);
 
-			final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.callocStack(stack)
+			final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
 					.commandPool(commandPoolHandle)
 					.level(level)
@@ -83,7 +83,7 @@ public class CommandBuffers {
 		try (MemoryStack stack = stackPush()) {
 			final PointerBuffer pCommandBuffer = stack.mallocPointer(1);
 
-			final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.callocStack(stack)
+			final VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
 					.commandPool(commandPoolHandle)
 					.level(level)

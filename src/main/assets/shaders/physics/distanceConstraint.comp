@@ -1,0 +1,51 @@
+#version 460
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_gpu_shader_fp64 : enable
+
+#define WORKGROUP_SIZE 32
+
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+struct Particle {
+	dvec4 position_mass;
+	dvec4 prevPosition_invMass;
+	dvec4 velocity_null;
+	dvec4 null; // external force?
+};
+
+layout(set = 0, binding = 0) buffer particlesBuffer {
+	Particle[] particles;
+};
+
+readonly layout(set = 1, binding = 0) buffer constraintParticleIndices {
+	int[] particleIndices;
+};
+
+readonly layout(set = 1, binding = 1) buffer constraintRestDistances {
+	double[] restDistances;
+};
+
+readonly layout(push_constant) uniform constants {
+	double dt;
+	double compliance;
+	int count;
+	int	constraintOffset;
+};
+
+void main() {
+	if (gl_GlobalInvocationID.x >= count) return;
+
+	const int index1 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2];
+	const int index2 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2 + 1];
+
+	const dvec3 distanceVector = particles[index2].position_mass.xyz - particles[index1].position_mass.xyz;
+	const double distanceDifference = length(distanceVector) - restDistances[gl_GlobalInvocationID.x + constraintOffset];
+
+	if (abs(distanceDifference) < 0.001) return;
+
+	const double lambda = 1.0 / (particles[index1].prevPosition_invMass.w + particles[index2].prevPosition_invMass.w + compliance / (dt * dt));
+	const dvec3 normalizedPositionDifference = normalize(distanceVector) * (lambda * distanceDifference);
+
+	particles[index1].position_mass.xyz += particles[index1].prevPosition_invMass.w * normalizedPositionDifference;
+	particles[index2].position_mass.xyz -= particles[index2].prevPosition_invMass.w * normalizedPositionDifference;
+}

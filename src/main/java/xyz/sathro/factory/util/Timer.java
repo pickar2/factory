@@ -11,11 +11,19 @@ public class Timer {
 		return value / 1_000_000D;
 	}
 
-	public double getElapsedTime() {
+	public double getElapsedTimeAndReset() {
 		final long time = System.nanoTime();
 		final long elapsedTime = time - lastLoopTime;
 		lastLoopTime = time;
 		return toMs(elapsedTime);
+	}
+
+	public void reset() {
+		lastLoopTime = System.nanoTime();
+	}
+
+	public double getElapsedTime() {
+		return toMs(System.nanoTime() - lastLoopTime);
 	}
 
 	public double getLastLoopTime() {
@@ -24,6 +32,6 @@ public class Timer {
 
 	@Override
 	public String toString() {
-		return getElapsedTime() + "";
+		return getElapsedTimeAndReset() + "";
 	}
 }

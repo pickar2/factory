@@ -74,7 +74,8 @@ public class ModelLoader {
 	}
 
 	private static void processTexCoords(AIMesh mesh, List<Vector2f> texCoords) {
-		final AIVector3D.Buffer aiTexCoords = requireNonNull(mesh.mTextureCoords(0));
+		final AIVector3D.Buffer aiTexCoords = mesh.mTextureCoords(0);
+		if (aiTexCoords == null) { return; }
 
 		for (int i = 0; i < aiTexCoords.capacity(); i++) {
 			final AIVector3D coords = aiTexCoords.get(i);

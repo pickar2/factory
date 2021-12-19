@@ -33,7 +33,7 @@ public interface IBlockModel {
 	/**
 	 * @return True if side takes full block and don't have any transparent bits in texture.
 	 */
-	default boolean isSideOpaque(@NotNull Side side) {
+	default boolean isSideOpaque(@NotNull SideNew side) {
 		return true;
 	}
 

@@ -20,6 +20,14 @@ public class Maths {
 		return Math.max(min, Math.min(number, max));
 	}
 
+	public static float clamp(float number, float min, float max) {
+		return Math.max(min, Math.min(number, max));
+	}
+
+	public static double clamp(double number, double min, double max) {
+		return Math.max(min, Math.min(number, max));
+	}
+
 	public static int getMinBitCount(int integer) {
 		int a = integer >> 16;
 		int b = 0;
@@ -72,5 +80,42 @@ public class Maths {
 
 	public static int ceilDiv(double a, double b) {
 		return (int) Math.ceil(a / b);
+	}
+
+	public static double cosDeg(double deg) {
+		return Math.cos(Math.toRadians(deg));
+	}
+
+	public static float cosDeg(float deg) {
+		return (float) Math.cos(Math.toRadians(deg));
+	}
+
+	public static double sinDeg(double deg) {
+		return Math.sin(Math.toRadians(deg));
+	}
+
+	public static float sinDeg(float deg) {
+		return (float) Math.sin(Math.toRadians(deg));
+	}
+
+	public static int intPow(int value, int power) {
+		int ret = value;
+		for (int i = 1; i < power; i++) {
+			ret *= value;
+		}
+
+		return ret;
+	}
+
+	public static double round(double value, int digitsAfterPoint) {
+		final double scale = intPow(10, digitsAfterPoint);
+		return Math.round(value * scale) / scale;
+	}
+
+	public static String fixedNumberCount(double value, int digits) {
+		value = round(value, digits);
+		final String str = String.valueOf(value);
+
+		return str + "0".repeat(digits - str.length() + String.valueOf(Maths.floor(value)).length() + 1);
 	}
 }

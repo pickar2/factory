@@ -10,7 +10,7 @@ public class CustomBlockModel implements IBlockModel {
 	public @NotNull CombinedBuffer.Builder getCombinedBufferBuilder(@NotNull Function<RelativeBlockPos, IBlockType> blockAccess) {
 		final CombinedBuffer.Builder builder = CombinedBuffer.builder();
 
-		for (final Side side : Side.values()) {
+		for (final SideNew side : SideNew.values()) {
 			// skip checks if model does not have this side, because block access slow
 			// may be change blockAccess function to something that takes 3 ints as argument? to remove RelativeBlockPos thing
 			final IBlockType blockType = blockAccess.apply(new RelativeBlockPos(side.x, side.y, side.z)); // TODO: cache default relative block pos in sides and in RelativeBlockPos class

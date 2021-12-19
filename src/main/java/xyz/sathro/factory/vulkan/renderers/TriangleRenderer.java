@@ -62,18 +62,18 @@ public class TriangleRenderer implements IRenderer {
 	private void prepareCommandBuffers() {
 		cbChanged = true;
 		try (MemoryStack stack = stackPush()) {
-			final LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.buffer);
+			final LongBuffer vertexBuffer = stack.longs(this.vertexBuffer.handle);
 			final LongBuffer offsets = stack.longs(0);
 
 			for (int i = 0; i < commandBuffers.length; i++) {
 				final VkCommandBuffer commandBuffer = commandBuffers[i][0];
 
-				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
+				final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.calloc(stack)
 						.renderPass(Vulkan.renderPass)
 						.framebuffer(Vulkan.swapChainFramebuffers.getLong(i))
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO);
 
-				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+				final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 						.pInheritanceInfo(inheritanceInfo)
 						.flags(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
@@ -108,12 +108,12 @@ public class TriangleRenderer implements IRenderer {
 
 	private long createDescriptorPool() {
 		try (MemoryStack stack = stackPush()) {
-			VkDescriptorPoolSize.Buffer poolSize = VkDescriptorPoolSize.callocStack(2, stack);
+			VkDescriptorPoolSize.Buffer poolSize = VkDescriptorPoolSize.calloc(2, stack);
 
 			poolSize.get(0).set(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Vulkan.swapChainImageCount);
 			poolSize.get(1).set(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Vulkan.swapChainImageCount);
 
-			VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.callocStack(stack)
+			VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO)
 					.pPoolSizes(poolSize)
 					.maxSets(Vulkan.swapChainImageCount);
@@ -127,11 +127,11 @@ public class TriangleRenderer implements IRenderer {
 
 	private long createDescriptorSetLayout() {
 		try (MemoryStack stack = stackPush()) {
-			VkDescriptorSetLayoutBinding.Buffer vkBindings = VkDescriptorSetLayoutBinding.callocStack(1, stack);
+			VkDescriptorSetLayoutBinding.Buffer vkBindings = VkDescriptorSetLayoutBinding.calloc(1, stack);
 
 			vkBindings.get(0).set(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, null);
 
-			VkDescriptorSetLayoutCreateInfo layoutInfo = VkDescriptorSetLayoutCreateInfo.callocStack(stack)
+			VkDescriptorSetLayoutCreateInfo layoutInfo = VkDescriptorSetLayoutCreateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO)
 					.pBindings(vkBindings);
 
@@ -150,7 +150,7 @@ public class TriangleRenderer implements IRenderer {
 				layoutsBuf.put(i, descriptorSetLayout);
 			}
 
-			VkDescriptorSetAllocateInfo allocInfo = VkDescriptorSetAllocateInfo.callocStack(stack)
+			VkDescriptorSetAllocateInfo allocInfo = VkDescriptorSetAllocateInfo.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
 					.descriptorPool(descriptorPoolHandle)
 					.pSetLayouts(layoutsBuf);
@@ -164,11 +164,11 @@ public class TriangleRenderer implements IRenderer {
 				descriptorSets.add(i, setsBuf.get(i));
 			}
 
-			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(UBO.SIZEOF);
 
-			VkWriteDescriptorSet.Buffer descriptorWrites = VkWriteDescriptorSet.callocStack(1, stack)
+			VkWriteDescriptorSet.Buffer descriptorWrites = VkWriteDescriptorSet.calloc(1, stack)
 					.sType(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
 					.descriptorCount(1)
 					.dstArrayElement(0)
@@ -178,7 +178,7 @@ public class TriangleRenderer implements IRenderer {
 
 			for (int i = 0; i < Vulkan.swapChainImageCount; i++) {
 				descriptorWrites.dstSet(descriptorSets.get(i));
-				bufferInfo.buffer(uniformBuffers[i].buffer);
+				bufferInfo.buffer(uniformBuffers[i].handle);
 				vkUpdateDescriptorSets(Vulkan.device, descriptorWrites, null);
 			}
 
@@ -204,7 +204,7 @@ public class TriangleRenderer implements IRenderer {
 				.rasterizerDiscardEnable(false)
 				.depthBiasEnable(false);
 
-		final VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.callocStack()
+		final VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.calloc()
 				.sType(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO)
 				.sampleShadingEnable(false)
 				.minSampleShading(0.2f)

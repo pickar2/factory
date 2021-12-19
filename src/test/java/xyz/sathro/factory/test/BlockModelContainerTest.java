@@ -15,12 +15,12 @@ public class BlockModelContainerTest {
 
 		final UnitBlockModelContainer unit = new UnitBlockModelContainer();
 
-		unit.setSideTexture(Side.TOP, texture);
-		unit.setSideTexture(Side.BOTTOM, texture);
-		unit.setSideTexture(Side.LEFT, texture);
-		unit.setSideTexture(Side.RIGHT, texture);
-		unit.setSideTexture(Side.FRONT, texture);
-		unit.setSideTexture(Side.BACK, texture);
+		unit.setSideTexture(SideNew.TOP, texture);
+		unit.setSideTexture(SideNew.BOTTOM, texture);
+		unit.setSideTexture(SideNew.LEFT, texture);
+		unit.setSideTexture(SideNew.RIGHT, texture);
+		unit.setSideTexture(SideNew.FRONT, texture);
+		unit.setSideTexture(SideNew.BACK, texture);
 
 		final BlockModelContainer[] blocks = new BlockModelContainer[2];
 
@@ -32,7 +32,7 @@ public class BlockModelContainerTest {
 			block.fill(filler);
 			block.makeQuads(0, 0, 0);
 
-			for (int i = 0; i < Side.values().length; i++) {
+			for (int i = 0; i < SideNew.values().length; i++) {
 				assertEquals(1, block.getMaskQuads()[i].length);
 
 				final TexturedQuad quad = block.getMaskQuads()[i][0];
@@ -40,7 +40,7 @@ public class BlockModelContainerTest {
 
 				assertFullSide(quad);
 
-				final Side side = quad.getSide();
+				final SideNew side = quad.getSide();
 				if (side.isIncrease) {
 					assertEquals(MAX_SIZE, quad.getPos().get(side.d));
 				} else {
@@ -59,16 +59,16 @@ public class BlockModelContainerTest {
 
 		final UnitBlockModelContainer unit = new UnitBlockModelContainer();
 
-		unit.setSideTexture(Side.TOP, texture);
-		unit.setSideTexture(Side.BOTTOM, texture);
-		unit.setSideTexture(Side.LEFT, texture);
-		unit.setSideTexture(Side.RIGHT, texture);
-		unit.setSideTexture(Side.FRONT, texture);
-		unit.setSideTexture(Side.BACK, texture);
+		unit.setSideTexture(SideNew.TOP, texture);
+		unit.setSideTexture(SideNew.BOTTOM, texture);
+		unit.setSideTexture(SideNew.LEFT, texture);
+		unit.setSideTexture(SideNew.RIGHT, texture);
+		unit.setSideTexture(SideNew.FRONT, texture);
+		unit.setSideTexture(SideNew.BACK, texture);
 
 		int[] pos = new int[3];
 		int u, v;
-		for (Side slabSide : Side.values()) {
+		for (SideNew slabSide : SideNew.values()) {
 			if (!slabSide.isIncrease) { continue; }
 			u = (slabSide.d + 1) % 3;
 			v = (slabSide.d + 2) % 3;
@@ -86,8 +86,8 @@ public class BlockModelContainerTest {
 
 				slab.makeQuads(0, 0, 0);
 
-				for (int i = 0; i < Side.values().length; i++) {
-					final Side checkSide = Side.values()[i];
+				for (int i = 0; i < SideNew.values().length; i++) {
+					final SideNew checkSide = SideNew.values()[i];
 					final TexturedQuad quad;
 					if (d == 0 && checkSide == slabSide || d == 1 && checkSide == slabSide.opposite()) {
 						assertEquals(1, slab.getOuterQuads()[i].length);
@@ -119,7 +119,7 @@ public class BlockModelContainerTest {
 	// TODO: add custom blockModel test
 
 	public void assertFullSide(TexturedQuad quad) {
-		final Side side = quad.getSide();
+		final SideNew side = quad.getSide();
 
 		assertEquals(0, quad.getPos().get((side.d + 1) % 3));
 		assertEquals(0, quad.getPos().get((side.d + 2) % 3));
@@ -129,7 +129,7 @@ public class BlockModelContainerTest {
 	}
 
 	public void assertHalfSide(TexturedQuad quad) {
-		final Side side = quad.getSide();
+		final SideNew side = quad.getSide();
 
 		final int a = quad.getSize().x > quad.getSize().y ? side.textureX : side.textureY; // longest coordinate
 		final int b = a == side.textureX ? side.textureY : side.textureX;

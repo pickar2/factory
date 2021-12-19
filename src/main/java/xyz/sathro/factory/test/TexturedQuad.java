@@ -13,7 +13,7 @@ public class TexturedQuad {
 	public static final int MAX_POS = 1 << (BlockModelContainer.MAX_DEEPNESS + 1);
 	public static final int MAX_POS_MINUS_ONE = MAX_POS - 1;
 
-	@Getter private final Side side;
+	@Getter private final SideNew side;
 	@Getter private final Vector3i pos;
 	@Getter private final Vector2i size;
 
@@ -21,7 +21,7 @@ public class TexturedQuad {
 	@Getter private final Vector2i texturePos;
 	@Getter private final Vector2i textureSize;
 
-	public TexturedQuad(Side side, BlockTexture texture) {
+	public TexturedQuad(SideNew side, BlockTexture texture) {
 		this.side = side;
 		pos = new Vector3i(0);
 		size = new Vector2i(MAX_POS);

@@ -1,5 +1,6 @@
 package xyz.sathro.factory.window;
 
+import lombok.Getter;
 import org.lwjgl.glfw.GLFWFramebufferSizeCallback;
 import org.lwjgl.glfw.GLFWKeyCallback;
 import org.lwjgl.glfw.GLFWVidMode;
@@ -22,7 +23,7 @@ public class Window {
 	public static long handle;
 
 	public static boolean shouldClose = false;
-	public static boolean cursorGrabbed = false;
+	@Getter private static boolean cursorGrabbed = false;
 
 	private static GLFWKeyCallback keyCallback;
 	private static GLFWWindowSizeCallback windowSizeCallback;
@@ -30,6 +31,7 @@ public class Window {
 
 	public static void update() {
 		shouldClose = glfwWindowShouldClose(handle);
+		glfwPollEvents();
 	}
 
 	public static void init() {
@@ -40,11 +42,9 @@ public class Window {
 		glfwDefaultWindowHints();
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-//		glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-//		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 
-		long monitor = glfwGetPrimaryMonitor();
-		GLFWVidMode mode = glfwGetVideoMode(monitor);
+		final long monitor = glfwGetPrimaryMonitor();
+		final GLFWVidMode mode = glfwGetVideoMode(monitor);
 
 		if (mode == null) {
 			throw new RuntimeException("Cannot get video mode");
@@ -55,7 +55,6 @@ public class Window {
 		} else {
 			handle = glfwCreateWindow(width, height, title, 0, 0);
 		}
-//		glfwSetWindowOpacity(handle, 0);
 //		glfwSetWindowMonitor(handle, monitor, 0, 0, mode.width(), mode.height(), 0);
 		glfwSetWindowPos(handle, (mode.width() - width) / 2, (mode.height() - height) / 2);
 
@@ -66,24 +65,24 @@ public class Window {
 		glfwSetKeyCallback(handle, keyCallback = new GLFWKeyCallback() {
 			public void invoke(long window, int key, int scancode, int action, int mods) { //TODO: user keyboard input here
 				if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+					// TODO: cache key events
 					EventManager.callEvent(new KeyDownEvent(key, action));
 				} else if (action == GLFW_RELEASE) {
 					EventManager.callEvent(new KeyUpEvent(key));
 				}
 
 				if (key == GLFW_KEY_LEFT_ALT) {
-					if (action == GLFW_PRESS) {
-						glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+					if (action != GLFW_RELEASE) {
 						cursorGrabbed = false;
+						glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 					} else {
-						MouseInput.first = true;
-						glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-						cursorGrabbed = true;
+						if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_TRUE) {
+							cursorGrabbed = true;
+							glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+						}
 					}
 				}
-				if (action != GLFW_RELEASE) {
-					return;
-				}
+
 				if (key == GLFW_KEY_ESCAPE) {
 					glfwSetWindowShouldClose(window, true);
 				}
@@ -104,21 +103,22 @@ public class Window {
 
 		glfwSetFramebufferSizeCallback(handle, framebufferSizeCallback = new GLFWFramebufferSizeCallback() {
 			public void invoke(long window, int width, int height) {
-//				System.out.println("RESIZE");
 				MainRenderer.framebufferResize = true;
 			}
 		});
 
-//		if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_TRUE) {
-//			cursorGrabbed = true;
-//			glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-//		} else {
-		cursorGrabbed = false;
-		glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-//		}
+		if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_TRUE) {
+			cursorGrabbed = true;
+			glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		} else {
+			cursorGrabbed = false;
+			glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		}
 	}
 
 	public static boolean isKeyPressed(int key) {
+		// TODO: write an abstraction layer over key handling, because this function should only be called from main thread
+		// TODO: create map of <GLFW_KEY, boolean> to store last state
 		return glfwGetKey(handle, key) == GLFW_PRESS;
 	}
 

@@ -1,17 +1,21 @@
 package xyz.sathro.vulkan.descriptors;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.NativeResource;
 import org.lwjgl.vulkan.VkCopyDescriptorSet;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorImageInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 import xyz.sathro.vulkan.Vulkan;
+import xyz.sathro.vulkan.models.VulkanBuffer;
 
 import java.nio.LongBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
+import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -39,8 +43,9 @@ public class DescriptorSet {
 	}
 
 	public class UpdateBuilder {
-		private final HashMap<Integer, DescriptorWrite> writes = new HashMap<>();
-		private final List<DescriptorCopy> copies = new ArrayList<>();
+		private final Int2ObjectMap<DescriptorWrite> writes = new Int2ObjectOpenHashMap<>();
+		private final List<DescriptorCopy> copies = new ObjectArrayList<>();
+		private final List<NativeResource> freeAfterUpdate = new ObjectArrayList<>();
 
 		private UpdateBuilder() { }
 
@@ -61,7 +66,7 @@ public class DescriptorSet {
 			try (MemoryStack stack = stackPush()) {
 				VkWriteDescriptorSet.Buffer descriptorWrites = null;
 				if (writes.size() > 0) {
-					descriptorWrites = VkWriteDescriptorSet.callocStack(writes.size(), stack);
+					descriptorWrites = VkWriteDescriptorSet.calloc(writes.size(), stack);
 					int i = 0;
 					for (DescriptorWrite write : writes.values()) {
 						descriptorWrites.get(i++).set(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, write.pNext, handle,
@@ -73,7 +78,7 @@ public class DescriptorSet {
 
 				VkCopyDescriptorSet.Buffer descriptorCopies = null;
 				if (!copies.isEmpty()) {
-					descriptorCopies = VkCopyDescriptorSet.callocStack(copies.size(), stack);
+					descriptorCopies = VkCopyDescriptorSet.calloc(copies.size(), stack);
 					int i = 0;
 					for (DescriptorCopy copy : copies) {
 						descriptorCopies.get(i++).set(VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET, VK_NULL_HANDLE,
@@ -84,6 +89,10 @@ public class DescriptorSet {
 				}
 
 				vkUpdateDescriptorSets(Vulkan.device, descriptorWrites, descriptorCopies);
+			}
+
+			for (NativeResource resource : freeAfterUpdate) {
+				resource.free();
 			}
 		}
 
@@ -105,7 +114,7 @@ public class DescriptorSet {
 
 			private DescriptorWrite(int bindingIndex) {
 				this.dstArrayElement = 0;
-				this.descriptorCount = -1;
+				this.descriptorCount = 0;
 				this.bindingIndex = bindingIndex;
 			}
 
@@ -121,25 +130,48 @@ public class DescriptorSet {
 
 			public DescriptorWrite pImageInfo(VkDescriptorImageInfo.Buffer pImageInfo) {
 				this.pImageInfo = pImageInfo;
-				if (descriptorCount == -1) {
-					descriptorCount = pImageInfo.remaining();
-				}
+				descriptorCount += pImageInfo.limit();
+
 				return this;
 			}
 
 			public DescriptorWrite pBufferInfo(VkDescriptorBufferInfo.Buffer pBufferInfo) {
 				this.pBufferInfo = pBufferInfo;
-				if (descriptorCount == -1) {
-					descriptorCount = pBufferInfo.remaining();
+				descriptorCount += pBufferInfo.limit();
+
+				return this;
+			}
+
+			public DescriptorWrite buffer(VulkanBuffer buffer) {
+				this.pBufferInfo = VkDescriptorBufferInfo.calloc(1)
+						.offset(0)
+						.buffer(buffer.handle)
+						.range(VK_WHOLE_SIZE);
+				descriptorCount += 1;
+
+				freeAfterUpdate.add(this.pBufferInfo);
+
+				return this;
+			}
+
+			public DescriptorWrite buffers(VulkanBuffer[] buffers) {
+				this.pBufferInfo = VkDescriptorBufferInfo.calloc(buffers.length, stackGet())
+						.offset(0)
+						.range(VK_WHOLE_SIZE);
+				for (int i = 0; i < buffers.length; i++) {
+					this.pBufferInfo.get(i).buffer(buffers[i].handle);
 				}
+				descriptorCount += buffers.length;
+
+				freeAfterUpdate.add(this.pBufferInfo);
+
 				return this;
 			}
 
 			public DescriptorWrite pTexelBufferView(LongBuffer pTexelBufferView) {
 				this.pTexelBufferView = pTexelBufferView;
-				if (descriptorCount == -1) {
-					descriptorCount = pTexelBufferView.remaining();
-				}
+				descriptorCount += pTexelBufferView.limit();
+
 				return this;
 			}
 

@@ -8,11 +8,11 @@ import xyz.sathro.vulkan.renderer.MainRenderer;
 public class TickScheduler {
 	private static final Object sync = new Object();
 	@SuppressWarnings("unchecked")
-	private static final ObjectArrayList<Runnable>[] tasks = new ObjectArrayList[MainRenderer.UPDATES_PER_SECOND];
+	private static final ObjectArrayList<Runnable>[] tasks = new ObjectArrayList[MainRenderer.FRAMES_PER_SECOND];
 	private static int counter = 0;
 
 	static {
-		for (int i = 0; i < MainRenderer.UPDATES_PER_SECOND; i++) {
+		for (int i = 0; i < MainRenderer.FRAMES_PER_SECOND; i++) {
 			tasks[i] = new ObjectArrayList<>();
 		}
 	}
@@ -28,12 +28,12 @@ public class TickScheduler {
 	}
 
 	public static void scheduleTask(int ticks, Runnable runnable) {
-		if (ticks <= 0 || ticks > MainRenderer.UPDATES_PER_SECOND) {
+		if (ticks <= 0 || ticks > MainRenderer.FRAMES_PER_SECOND) {
 			throw new IllegalArgumentException();
 		}
 		synchronized (sync) {
 			final int count = ticks;
-			while (ticks <= MainRenderer.UPDATES_PER_SECOND) {
+			while (ticks <= MainRenderer.FRAMES_PER_SECOND) {
 				tasks[ticks - 1].add(runnable);
 				ticks += count;
 			}
@@ -42,7 +42,7 @@ public class TickScheduler {
 
 	public static void scheduleOneTimeTask(int waitTicks, Runnable runnable) {
 		synchronized (sync) {
-			final int tick = (counter + waitTicks) % MainRenderer.UPDATES_PER_SECOND;
+			final int tick = (counter + waitTicks) % MainRenderer.FRAMES_PER_SECOND;
 			tasks[tick].add(runnable);
 			tasks[tick].add(() -> tasks[tick].remove(runnable));
 		}
@@ -52,7 +52,7 @@ public class TickScheduler {
 		double lag = 0.0;
 		Timer timer = new Timer();
 		while (!Window.shouldClose) {
-			double elapsed = timer.getElapsedTime();
+			double elapsed = timer.getElapsedTimeAndReset();
 			lag += elapsed;
 
 			if (lag >= MainRenderer.MS_PER_UPDATE) {
@@ -70,7 +70,7 @@ public class TickScheduler {
 			}
 		}
 
-		if (++counter == MainRenderer.UPDATES_PER_SECOND) {
+		if (++counter == MainRenderer.FRAMES_PER_SECOND) {
 			counter = 0;
 		}
 	}

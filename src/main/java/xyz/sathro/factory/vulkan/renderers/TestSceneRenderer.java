@@ -1,18 +1,15 @@
 package xyz.sathro.factory.vulkan.renderers;
 
+import lombok.extern.log4j.Log4j2;
 import org.joml.Matrix4f;
-import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import xyz.sathro.factory.collision.Octree;
-import xyz.sathro.factory.physics.Body;
-import xyz.sathro.factory.physics.Pose;
-import xyz.sathro.factory.physics.XPBD;
-import xyz.sathro.factory.physics.constraints.Constraint;
-import xyz.sathro.factory.physics.constraints.joints.Joint;
-import xyz.sathro.factory.physics.constraints.joints.SphericalJoint;
+import xyz.sathro.factory.test.xpbd.FpsCamera;
+import xyz.sathro.factory.test.xpbd.Scene;
+import xyz.sathro.factory.test.xpbd.body.PhysicsBody;
 import xyz.sathro.factory.util.Side;
 import xyz.sathro.factory.vulkan.vertices.TestVertex;
 import xyz.sathro.vulkan.Vulkan;
@@ -42,27 +39,31 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK10.*;
 
+@Log4j2
 public class TestSceneRenderer implements IRenderer {
 	public static final TestSceneRenderer INSTANCE = new TestSceneRenderer();
-	private final List<Body> bodies = new ArrayList<>();
-	private final List<Constraint> constraints = new ArrayList<>();
+
+	private final Scene scene = new Scene();
+
+	private boolean cbChanged = false;
 	private int octreeVertexCount = -1;
 	private boolean dirty;
-	private VulkanPipeline[] graphicPipelines;
-	private VulkanPipeline[] octreePipelines;
-	private DescriptorPool descriptorPool;
-	private DescriptorSetLayout descriptorSetLayout;
-	private List<DescriptorSet> descriptorSets;
-	private DescriptorPool octreeDescriptorPool;
-	private DescriptorSetLayout octreeDescriptorSetLayout;
-	private List<DescriptorSet> octreeDescriptorSets;
 	private long commandPool;
 	private VkCommandBuffer[][] commandBuffers;
 	public CombinedBuffer combinedBuffer;
-	public VulkanBuffer octreeVertexBuffer;
 	private VulkanBuffer[] cameraUniformBuffers;
+
+	private DescriptorPool descriptorPool;
+	private VulkanPipeline[] graphicPipelines;
+	private List<DescriptorSet> descriptorSets;
+	private DescriptorSetLayout descriptorSetLayout;
 	private VulkanBuffer[] bodiesUniformBuffers;
-	private boolean cbChanged = false;
+
+	private VulkanPipeline[] octreePipelines;
+	private DescriptorPool octreeDescriptorPool;
+	private DescriptorSetLayout octreeDescriptorSetLayout;
+	private List<DescriptorSet> octreeDescriptorSets;
+	public VulkanBuffer octreeVertexBuffer;
 
 	private TestSceneRenderer() { }
 
@@ -79,8 +80,8 @@ public class TestSceneRenderer implements IRenderer {
 	private void prepareCommandBuffers() {
 		cbChanged = true;
 		try (MemoryStack stack = stackPush()) {
-			LongBuffer vertexBuffer = stack.longs(this.combinedBuffer.getVertexBuffer().buffer);
-			LongBuffer octreeVertexBuffer = stack.longs(this.octreeVertexBuffer.buffer);
+			LongBuffer vertexBuffer = stack.longs(this.combinedBuffer.getVertexBuffer().handle);
+			LongBuffer octreeVertexBuffer = stack.longs(this.octreeVertexBuffer.handle);
 			LongBuffer offsets = stack.longs(0);
 			IntBuffer offset = stack.ints(0);
 			VertexData vertexData;
@@ -88,12 +89,12 @@ public class TestSceneRenderer implements IRenderer {
 			for (int i = 0; i < commandBuffers.length; i++) {
 				VkCommandBuffer commandBuffer = commandBuffers[i][0];
 
-				VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.callocStack(stack)
+				VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.calloc(stack)
 						.renderPass(Vulkan.renderPass)
 						.framebuffer(Vulkan.swapChainFramebuffers.getLong(i))
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO);
 
-				VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.callocStack(stack)
+				VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack)
 						.pInheritanceInfo(inheritanceInfo)
 						.flags(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
 						.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
@@ -104,26 +105,26 @@ public class TestSceneRenderer implements IRenderer {
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
 
 					vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffer, offsets);
-					vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+					vkCmdBindIndexBuffer(commandBuffer, combinedBuffer.getIndexBuffer().handle, 0, VK_INDEX_TYPE_UINT32);
 
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 0, stack.longs(descriptorSets.get(i).getHandle()), offset);
 
 					vertexData = combinedBuffer.getVertexData(graphicPipeline.vertexType);
 
-					vkCmdDrawIndexed(commandBuffer, vertexData.getIndexCount(), bodies.size(), vertexData.getIndexOffset(), vertexData.getVertexOffset(), 0);
+					vkCmdDrawIndexed(commandBuffer, vertexData.getIndexCount(), 2, vertexData.getIndexOffset(), vertexData.getVertexOffset(), 0);
 				}
 
-				if (octreeVertexCount != -1) {
-					for (VulkanPipeline graphicPipeline : octreePipelines) {
-						vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
-
-						vkCmdBindVertexBuffers(commandBuffer, 0, octreeVertexBuffer, offsets);
-
-						vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 0, stack.longs(octreeDescriptorSets.get(i).getHandle()), null);
-
-						vkCmdDraw(commandBuffer, octreeVertexCount, 1, 0, 0);
-					}
-				}
+//				if (octreeVertexCount != -1) {
+//					for (VulkanPipeline graphicPipeline : octreePipelines) {
+//						vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.handle);
+//
+//						vkCmdBindVertexBuffers(commandBuffer, 0, octreeVertexBuffer, offsets);
+//
+//						vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline.layout, 0, stack.longs(octreeDescriptorSets.get(i).getHandle()), null);
+//
+//						vkCmdDraw(commandBuffer, octreeVertexCount, 1, 0, 0);
+//					}
+//				}
 
 				VulkanUtils.VkCheck(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer");
 			}
@@ -173,19 +174,19 @@ public class TestSceneRenderer implements IRenderer {
 		final List<DescriptorSet> descriptorSets = descriptorPool.createDescriptorSets(descriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
-			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(VK_WHOLE_SIZE);
 
-			VkDescriptorBufferInfo.Buffer bodiesBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			VkDescriptorBufferInfo.Buffer bodiesBufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(VK_WHOLE_SIZE);
 
 			for (int i = 0; i < descriptorSets.size(); i++) {
 				final DescriptorSet descriptorSet = descriptorSets.get(i);
 
-				cameraBufferInfo.buffer(cameraUniformBuffers[i].buffer);
-				bodiesBufferInfo.buffer(bodiesUniformBuffers[i].buffer);
+				cameraBufferInfo.buffer(cameraUniformBuffers[i].handle);
+				bodiesBufferInfo.buffer(bodiesUniformBuffers[i].handle);
 
 				descriptorSet.updateBuilder()
 						.write(0).pBufferInfo(cameraBufferInfo).add()
@@ -201,14 +202,14 @@ public class TestSceneRenderer implements IRenderer {
 		final List<DescriptorSet> descriptorSets = octreeDescriptorPool.createDescriptorSets(octreeDescriptorSetLayout, Vulkan.swapChainImageCount);
 
 		try (MemoryStack stack = stackPush()) {
-			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.callocStack(1, stack)
+			VkDescriptorBufferInfo.Buffer cameraBufferInfo = VkDescriptorBufferInfo.calloc(1, stack)
 					.offset(0)
 					.range(VK_WHOLE_SIZE);
 
 			for (int i = 0; i < descriptorSets.size(); i++) {
 				DescriptorSet descriptorSet = descriptorSets.get(i);
 
-				cameraBufferInfo.buffer(cameraUniformBuffers[i].buffer);
+				cameraBufferInfo.buffer(cameraUniformBuffers[i].handle);
 
 				descriptorSet.updateBuilder()
 						.write(0).pBufferInfo(cameraBufferInfo).add()
@@ -221,6 +222,7 @@ public class TestSceneRenderer implements IRenderer {
 
 	private VulkanPipeline[] createPipelines() {
 		return new VulkanPipelineBuilder(new String[] { "shaders/scene_shader.vert" }, new String[] { "shaders/scene_shader.frag" }, new TestVertex(), new DescriptorSetLayout[] { descriptorSetLayout })
+				.setCullMode(VK_CULL_MODE_BACK_BIT)
 				.build();
 	}
 
@@ -258,56 +260,63 @@ public class TestSceneRenderer implements IRenderer {
 					builder.addVertex(new TestVertex(position, new Vector3f(colors[side.ordinal() / 2])));
 				}
 			}
-			builder.addIndices(TestVertex.class, k, k + 1, k + 2, k + 1, k + 2, k + 3);
+			if (side.ordinal() % 2 == 0) {
+				builder.addIndices(TestVertex.class, k, k + 2, k + 1, k + 1, k + 2, k + 3);
+			} else {
+				builder.addIndices(TestVertex.class, k, k + 1, k + 2, k + 2, k + 1, k + 3);
+			}
+
 			k += 4;
 		}
 
 		combinedBuffer = builder.build();
 
-		int numObjects = 100;
+//		scene.init();
 
-		Vector3d objectsSize = new Vector3d(0.2f);
-		Vector3d lastObjectsSize = new Vector3d(1, 0.2f, 1);
-
-		Vector3d pos = new Vector3d(1.2f, 2f, 1.2f);
-		Pose pose = new Pose();
-		Body lastBody = null;
-		Pose jointPose0 = new Pose();
-		Pose jointPose1 = new Pose();
-		jointPose0.rotation.setAngleAxis(0.5 * Math.PI, 0, 0, 1);
-		jointPose1.rotation.setAngleAxis(0.5 * Math.PI, 0, 0, 1);
-		Vector3d lastSize = new Vector3d(objectsSize);
-
-		double rotDamping = 1000d;
-		double posDamping = 1000d;
-
-		for (int i = 0; i < numObjects; i++) {
-			Vector3d size = i < numObjects - 1 ? objectsSize : lastObjectsSize;
-
-			pose.position.set(pos.x, pos.y - i * objectsSize.y, pos.z);
-
-			Body boxBody = new Body(pose, null);
-			boxBody.setBox(size, 100);
-			bodies.add(boxBody);
-
-			float s = i % 2 == 0 ? -0.5f : 0.5f;
-			jointPose0.position.set(s * size.x, 0.5 * size.y, s * size.z);
-			jointPose1.position.set(s * lastSize.x, -0.5 * lastSize.y, s * lastSize.z);
-
-			if (lastBody == null) {
-				jointPose1.set(jointPose0);
-				jointPose1.position.add(pose.position);
-			}
-
-			Joint constraint = new SphericalJoint(boxBody, lastBody, jointPose0, jointPose1);
-			constraint.rotDamping = rotDamping;
-			constraint.posDamping = posDamping;
-			constraint.compliance = 0.00001;
-			constraints.add(constraint);
-
-			lastBody = boxBody;
-			lastSize.set(size);
-		}
+//		int numObjects = 100;
+//
+//		Vector3d objectsSize = new Vector3d(0.2f);
+//		Vector3d lastObjectsSize = new Vector3d(1, 0.2f, 1);
+//
+//		Vector3d pos = new Vector3d(1.2f, 2f, 1.2f);
+//		Pose pose = new Pose();
+//		Body lastBody = null;
+//		Pose jointPose0 = new Pose();
+//		Pose jointPose1 = new Pose();
+//		jointPose0.rotation.setAngleAxis(0.5 * Math.PI, 0, 0, 1);
+//		jointPose1.rotation.setAngleAxis(0.5 * Math.PI, 0, 0, 1);
+//		Vector3d lastSize = new Vector3d(objectsSize);
+//
+//		double rotDamping = 1000d;
+//		double posDamping = 1000d;
+//
+//		for (int i = 0; i < numObjects; i++) {
+//			Vector3d size = i < numObjects - 1 ? objectsSize : lastObjectsSize;
+//
+//			pose.position.set(pos.x, pos.y - i * objectsSize.y, pos.z);
+//
+//			Body boxBody = new Body(pose, null);
+//			boxBody.setBox(size, 100);
+//			bodies.add(boxBody);
+//
+//			float s = i % 2 == 0 ? -0.5f : 0.5f;
+//			jointPose0.position.set(s * size.x, 0.5 * size.y, s * size.z);
+//			jointPose1.position.set(s * lastSize.x, -0.5 * lastSize.y, s * lastSize.z);
+//
+//			if (lastBody == null) {
+//				jointPose1.set(jointPose0);
+//				jointPose1.position.add(pose.position);
+//			}
+//
+//			Joint constraint = new SphericalJoint(boxBody, lastBody, jointPose0, jointPose1);
+//			constraint.rotDamping = rotDamping;
+//			constraint.posDamping = posDamping;
+//			constraint.compliance = 0.00001;
+//			constraints.add(constraint);
+//
+//			lastBody = boxBody;
+//			lastSize.set(size);
+//		}
 
 		createSwapChain();
 	}
@@ -379,11 +388,16 @@ public class TestSceneRenderer implements IRenderer {
 	public void beforeFrame(int imageIndex) {
 		dirty = true;
 
+//		constraintList.add(constraint);
+
+//		scene.update();
+//		Physics.simulate(scene.getBodies(), scene.getConstraints());
+
 		Octree octree = new Octree();
 
-		for (Body body : bodies) {
-			octree.insertEntity(body);
-		}
+//		for (Body body : bodies) {
+//			octree.insertEntity(body);
+//		}
 
 //		List<Constraint> collisionConstraints = new ObjectArrayList<>();
 
@@ -395,7 +409,7 @@ public class TestSceneRenderer implements IRenderer {
 //		}
 //		constraints.addAll(collisionConstraints);
 
-		XPBD.simulate(bodies, constraints, 1 / 60f, 120, new Vector3d(0, -10, 0));
+//		XPBD.simulate(bodies, constraints, 1 / 60f, 120, new Vector3d(0, -10, 0));
 
 //		constraints.removeAll(collisionConstraints);
 
@@ -412,8 +426,14 @@ public class TestSceneRenderer implements IRenderer {
 			final UBO ubo = new UBO();
 
 			ubo.model.rotate((float) (glfwGetTime() * Math.toRadians(90)), 0.0f, 0.0f, 1.0f);
-			ubo.view.lookAt(12.0f, 2.0f, 12.0f, 0.0f, -25.0f, 0.0f, 0.0f, 1.0f, 0.0f).rotate((float) (glfwGetTime() * Math.toRadians(15)), 0, 1, 0);
-			ubo.proj.perspective((float) Math.toRadians(90), (float) Vulkan.swapChainExtent.width() / (float) Vulkan.swapChainExtent.height(), 0.01f, 1000.0f);
+			final FpsCamera camera = scene.getCamera();
+			final Vector3f pos = camera.getPosition();
+
+			ubo.view.identity()
+					.rotateXYZ((float) Math.toRadians(camera.getPitch()), (float) Math.toRadians(camera.getYaw()), (float) Math.toRadians(camera.getRoll()))
+					.translate(-pos.x, -pos.y, -pos.z);
+
+			ubo.proj.perspective((float) Math.toRadians(scene.getCamera().getFOV()), (float) Vulkan.swapChainExtent.width() / (float) Vulkan.swapChainExtent.height(), 0.01f, 1000.0f);
 			ubo.proj.m11(ubo.proj.m11() * -1);
 
 			PointerBuffer data = stack.mallocPointer(1);
@@ -428,13 +448,13 @@ public class TestSceneRenderer implements IRenderer {
 			vmaMapMemory(Vulkan.vmaAllocator, bodiesUniformBuffers[imageIndex].allocation, data);
 			buffer = data.getByteBuffer(0, ubo.sizeof());
 
-			for (int i = 0; i < bodies.size(); i++) {
-				final Body body = bodies.get(i);
+			for (int i = 0; i < scene.getBodies().size(); i++) {
+				final PhysicsBody body = scene.getBodies().get(i);
 
-				final Matrix4f pos = new Matrix4f().translate((float) body.pose.position.x, (float) body.pose.position.y, (float) body.pose.position.z);
-				final Matrix4f rot = new Matrix4f().rotate((float) body.pose.rotation.x, (float) body.pose.rotation.y, (float) body.pose.rotation.z, (float) body.pose.rotation.w);
-				final Matrix4f size = new Matrix4f().scale((float) body.size.x, (float) body.size.y, (float) body.size.z);
-				pos.mul(rot).mul(size).get(i * mat4Size, buffer);
+				final Matrix4f objectPos = new Matrix4f().translate((float) body.getPosition().x, (float) body.getPosition().y, (float) body.getPosition().z);
+//				final Matrix4f rot = new Matrix4f().rotate((float) body.pose.rotation.x, (float) body.pose.rotation.y, (float) body.pose.rotation.z, (float) body.pose.rotation.w);
+				final Matrix4f size = new Matrix4f().scale((float) Math.pow(body.getMass(), 1 / 3d) * 2);
+				objectPos.mul(size).get(i * mat4Size, buffer);
 			}
 
 			vmaUnmapMemory(Vulkan.vmaAllocator, bodiesUniformBuffers[imageIndex].allocation);

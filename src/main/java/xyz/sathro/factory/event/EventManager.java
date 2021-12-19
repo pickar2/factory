@@ -3,6 +3,7 @@ package xyz.sathro.factory.event;
 import it.unimi.dsi.fastutil.objects.*;
 import lombok.AllArgsConstructor;
 import lombok.ToString;
+import lombok.extern.log4j.Log4j2;
 import org.jetbrains.annotations.NotNull;
 import xyz.sathro.factory.event.annotations.SubscribeEvent;
 import xyz.sathro.factory.event.events.Event;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.function.Consumer;
 
 @SuppressWarnings({ "unchecked", "rawtypes" })
+@Log4j2
 public final class EventManager {
 	private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 	private static final MethodType EVENT_CONSUMER_TYPE = MethodType.methodType(void.class, Event.class);
@@ -154,6 +156,7 @@ public final class EventManager {
 	}
 
 	public static void callEvent(final Event event) {
+//		log.info("Calling {} from {}", event.getClass().getSimpleName(), Thread.currentThread());
 		if (event.isCancelled()) { return; }
 
 		final ObjectList<Listener<Event>> listeners = REGISTERED_LISTENERS.get(event.getClass());
@@ -167,6 +170,7 @@ public final class EventManager {
 	}
 
 	public static void callEvent(final GenericEvent<?> event) {
+//		log.info("Calling {}<{}> from {}", event.getClass().getSimpleName(), event.getType().getTypeName(), Thread.currentThread());
 		if (event.isCancelled()) { return; }
 
 		final Object2ObjectMap<Type, ObjectList<Listener<Event>>> map = REGISTERED_GENERIC_LISTENERS.get(event.getClass());
