@@ -12,6 +12,7 @@ import org.lwjgl.vulkan.*;
 import xyz.sathro.factory.Engine;
 import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.test.xpbd.PhysicsCompute;
+import xyz.sathro.factory.test.xpbd.PhysicsController;
 import xyz.sathro.factory.util.Maths;
 import xyz.sathro.factory.util.Timer;
 import xyz.sathro.factory.window.Window;
@@ -78,16 +79,19 @@ public class MainRenderer {
 				Time.lastDeltaTime = lag * MS_PER_UPDATE_INV;
 				Time.lastUnscaledDeltaTime = lag;
 
+				time = System.nanoTime();
 				EventManager.callEvent(new DrawFrameEvent(Time.lastDeltaTime));
 
-				time = System.nanoTime();
 				drawFrame(Time.lastDeltaTime);
 				final double fps = Maths.round(1000 / lag, 1);
 				final double frameTime = Maths.round((System.nanoTime() - time) / 1_000_000d, 2);
-				Engine.submitTask(() -> GLFW.glfwSetWindowTitle(Window.handle, Window.title +
-				                                                " FPS: " + Maths.fixedNumberCount(fps, 1) +
-				                                                " Frame time: " + Maths.fixedNumberCount(frameTime, 2) + "ms" +
-				                                                " Compute: " + Maths.fixedNumberCount(PhysicsCompute.list.stream().reduce(0L, Long::sum) / 1_000_000D / PhysicsCompute.list.size(), 2) + "ms")
+				Engine.submitTask(() -> GLFW.glfwSetWindowTitle(Window.handle,
+				                                                Window.title +
+				                                                " FPS: " + Maths.fixedPrecision(fps, 1) +
+				                                                " Frame time: " + Maths.fixedNumberSize(Maths.fixedPrecision(frameTime, 2), 4) + "ms" +
+				                                                " Compute: " + Maths.fixedPrecision(PhysicsCompute.getComputeTime(), 2) + "ms" +
+				                                                " Physics: " + Maths.fixedPrecision(PhysicsController.getPhysicsTime(), 2) + "ms"
+				                  )
 				);
 
 				lag = 0;

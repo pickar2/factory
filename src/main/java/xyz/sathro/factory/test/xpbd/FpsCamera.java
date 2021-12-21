@@ -5,6 +5,7 @@ import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
+import xyz.sathro.factory.Engine;
 import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.event.annotations.SubscribeEvent;
 import xyz.sathro.factory.util.Maths;
@@ -23,7 +24,8 @@ public class FpsCamera {
 	private static final float mouseSensitivity = 0.25f;
 	private final Vector3i moveDirection = new Vector3i();
 	@Getter private final Vector3f position = new Vector3f(10, 7, 20);
-	private float speedMultiplier = 1;
+	private final double defaultSpeedMultiplier = 60;
+	private double speedMultiplier = defaultSpeedMultiplier * Engine.UPS_INV;
 
 	@Getter @Setter private double FOV = 90;
 
@@ -98,16 +100,16 @@ public class FpsCamera {
 		if (event.action != GLFW_PRESS) { return; }
 
 		if (event.key == GLFW_KEY_LEFT_CONTROL) {
-			speedMultiplier = 2.6f;
+			speedMultiplier = defaultSpeedMultiplier * 2.6f * Engine.UPS_INV;
 		} else if (event.key == GLFW_KEY_LEFT_SHIFT) {
-			speedMultiplier = 0.4f;
+			speedMultiplier = defaultSpeedMultiplier * 0.4f * Engine.UPS_INV;
 		}
 	}
 
 	@SubscribeEvent
 	public void onKeyUp(KeyUpEvent event) {
 		if (event.key == GLFW_KEY_LEFT_CONTROL || event.key == GLFW_KEY_LEFT_SHIFT) {
-			speedMultiplier = 1;
+			speedMultiplier = defaultSpeedMultiplier * Engine.UPS_INV;
 		}
 	}
 }

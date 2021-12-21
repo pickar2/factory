@@ -31,6 +31,9 @@ public class Window {
 
 	public static void update() {
 		shouldClose = glfwWindowShouldClose(handle);
+		if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_FALSE) {
+			setCursorNotGrabbed();
+		}
 		glfwPollEvents();
 	}
 
@@ -73,12 +76,10 @@ public class Window {
 
 				if (key == GLFW_KEY_LEFT_ALT) {
 					if (action != GLFW_RELEASE) {
-						cursorGrabbed = false;
-						glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+						setCursorNotGrabbed();
 					} else {
 						if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_TRUE) {
-							cursorGrabbed = true;
-							glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+							setCursorGrabbed();
 						}
 					}
 				}
@@ -108,12 +109,20 @@ public class Window {
 		});
 
 		if (glfwGetWindowAttrib(handle, GLFW_HOVERED) == GLFW_TRUE) {
-			cursorGrabbed = true;
-			glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			setCursorGrabbed();
 		} else {
-			cursorGrabbed = false;
-			glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			setCursorNotGrabbed();
 		}
+	}
+
+	private static void setCursorGrabbed() {
+		cursorGrabbed = true;
+		glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
+
+	private static void setCursorNotGrabbed() {
+		cursorGrabbed = false;
+		glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	public static boolean isKeyPressed(int key) {

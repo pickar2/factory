@@ -112,10 +112,26 @@ public class Maths {
 		return Math.round(value * scale) / scale;
 	}
 
-	public static String fixedNumberCount(double value, int digits) {
+	public static String fixedPrecision(double value, int digits) {
 		value = round(value, digits);
 		final String str = String.valueOf(value);
 
 		return str + "0".repeat(digits - str.length() + String.valueOf(Maths.floor(value)).length() + 1);
+	}
+
+	public static String fixedNumberSize(String number, int size) {
+		if (number.length() > size + 1) {
+			return number.substring(0, size + 1);
+		} else {
+			return "0".repeat(size - number.length() + 1) + number;
+		}
+	}
+
+	public static double timeToDeltaMs(long startTime) {
+		return (System.nanoTime() - startTime) / 1_000_000D;
+	}
+
+	public static String timeToDeltaMs(long startTime, int digits) {
+		return fixedPrecision(timeToDeltaMs(startTime), digits);
 	}
 }

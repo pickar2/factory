@@ -1,4 +1,6 @@
 #version 460
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_gpu_shader_fp64 : enable
 
 #define WORKGROUP_SIZE 32
 
@@ -75,37 +77,10 @@ void main() {
 
 	const double s = (restVolumes[XPlusOffset] - currentVolume) / (w + compliance / (dt * dt));
 
-	if(abs(s) < 0.0001) { return; }
+//	if(abs(s) < 0.0000001) { return; }
 
 	for (int i = 0; i < 4; i++) {
+
 		particles[indices[i]].position_mass.xyz += s * particles[indices[i]].prevPosition_invMass.w * grads[i];
 	}
-
-	/*
-	double w = 0;
-	for (int i = 0; i < 4; i++) {
-		final Particle p0 = particles[idOrder[i][0]];
-		final Particle p1 = particles[idOrder[i][1]];
-		final Particle p2 = particles[idOrder[i][2]];
-
-		p1.getPosition().sub(p0.getPosition(), grads[i]);
-		final Vector3d diff2 = p2.getPosition().sub(p0.getPosition(), new Vector3d());
-
-		grads[i].cross(diff2).mul(ONE_OVER_SIX);
-
-		w += particles[i].getInvMass() * grads[i].lengthSquared();
-	}
-	if (w == 0) { return; }
-
-	final Vector3d diff0 = particles[1].getPosition().sub(particles[0].getPosition(), temp1);
-	final Vector3d diff1 = particles[2].getPosition().sub(particles[0].getPosition(), temp2);
-	final Vector3d diff2 = particles[3].getPosition().sub(particles[0].getPosition(), temp3);
-
-	final double currentVolume = diff0.cross(diff1).dot(diff2) * (ONE_OVER_SIX);
-	final double s = -(currentVolume - restVolume) / (w + compliance / (dt * dt));
-
-	for (int i = 0; i < 4; i++) {
-		particles[i].getPosition().fma(s * particles[i].getInvMass(), grads[i]);
-	}
-	*/
 }

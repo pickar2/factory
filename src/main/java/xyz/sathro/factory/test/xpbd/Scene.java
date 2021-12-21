@@ -9,7 +9,8 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import lombok.Getter;
 import org.joml.Vector3d;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.meshoptimizer.MeshOptimizer;
 import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.event.annotations.SubscribeEvent;
 import xyz.sathro.factory.test.xpbd.body.Particle;
@@ -17,14 +18,15 @@ import xyz.sathro.factory.test.xpbd.body.PhysicsBody;
 import xyz.sathro.factory.test.xpbd.constraint.Constraint;
 import xyz.sathro.factory.test.xpbd.constraint.DistanceConstraint;
 import xyz.sathro.factory.test.xpbd.constraint.TetrahedralVolumeConstraint;
+import xyz.sathro.factory.test.xpbd.events.PhysicsUpdateEvent;
 import xyz.sathro.factory.util.ResourceManager;
 import xyz.sathro.factory.window.Window;
-import xyz.sathro.factory.window.events.GameUpdateEvent;
 import xyz.sathro.factory.window.events.KeyDownEvent;
 import xyz.sathro.factory.window.events.MouseClickEvent;
 import xyz.sathro.vulkan.events.DrawFrameEvent;
 
 import java.io.IOException;
+import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
@@ -35,23 +37,34 @@ public class Scene {
 	@Getter private final List<TetrahedralVolumeConstraint> volumeConstraints;
 //	@Getter private final Int2ObjectMap<List<DistanceConstraint>> distanceConstraints;
 
-	@Getter private final List<MeshedBody> meshes = new ObjectArrayList<>();
-
-	private boolean isSimulating = true;
-	private boolean simulateOneFrame = false;
+	@Getter private final List<IMesh> meshes = new ObjectArrayList<>();
 
 	public Scene() {
 		EventManager.registerListeners(this);
 
 		final List<Vector3d> vertices = new ObjectArrayList<>();
 		final IntList tetrahedraIndices = new IntArrayList();
-		loadTetModel("models/dragon.tet", vertices, tetrahedraIndices);
+		loadTetModel("models/newDragon.tet", vertices, tetrahedraIndices);
 
-		final List<Vector3d> surfaceVertices = new ObjectArrayList<>();
-		final IntList surfaceIndices = new IntArrayList();
-		loadObjModel("models/dragon.surf", surfaceVertices, surfaceIndices);
+		final List<MeshedBody2.AttachedVertex> surfaceVertices = new ObjectArrayList<>();
+		IntList surfaceIndices = new IntArrayList();
+		loadTetSurfModel("models/newDragon.tetsurf", surfaceVertices, surfaceIndices);
 
-		final MeshedBody body = new MeshedBody(vertices, tetrahedraIndices, surfaceVertices, surfaceIndices);
+		final IntBuffer intBuffer = MemoryUtil.memAllocInt(surfaceIndices.size());
+		intBuffer.put(0, surfaceIndices.toIntArray());
+
+		MeshOptimizer.meshopt_optimizeVertexCache(intBuffer, intBuffer, surfaceVertices.size());
+
+		final int[] ints = new int[surfaceIndices.size()];
+		intBuffer.get(ints);
+		surfaceIndices = IntList.of(ints);
+		MemoryUtil.memFree(intBuffer);
+
+		for (Vector3d vertex : vertices) {
+			vertex.y += 1;
+		}
+
+		final IMesh body = new MeshedBody2(vertices, tetrahedraIndices, surfaceVertices, surfaceIndices);
 		meshes.add(body);
 
 		bodies.addAll(List.of(body.getParticles()));
@@ -151,6 +164,33 @@ public class Scene {
 		}
 	}
 
+	private static void loadTetSurfModel(String path, List<MeshedBody2.AttachedVertex> vertices, IntList indices) {
+		try {
+			final List<String> lines = Files.readAllLines(ResourceManager.getPathFromString(path));
+			final String[] split = lines.get(0).split(" ");
+			final int vertexCount = Integer.parseInt(split[1]);
+			final int triangleCount = Integer.parseInt(split[2]);
+			for (int i = 1; i < 1 + vertexCount; i++) {
+				final String[] line = lines.get(i).split(" ");
+				vertices.add(new MeshedBody2.AttachedVertex(
+						Integer.parseInt(line[0]),
+						Double.parseDouble(line[1]),
+						Double.parseDouble(line[2]),
+						Double.parseDouble(line[3])
+				));
+			}
+
+			for (int i = 1 + vertexCount; i < 1 + vertexCount + triangleCount; i++) {
+				final String[] line = lines.get(i).split(" ");
+				for (int j = 0; j < 3; j++) {
+					indices.add(Integer.parseInt(line[j]));
+				}
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	private static void loadObjModel(String path, List<Vector3d> vertices, IntList indices) {
 		try {
 			final List<String> lines = Files.readAllLines(ResourceManager.getPathFromString(path));
@@ -173,7 +213,7 @@ public class Scene {
 
 	@SubscribeEvent
 	public void onVulkanInit( /* create event */) {
-		for (MeshedBody mesh : meshes) {
+		for (IMesh mesh : meshes) {
 			PhysicsCompute.addParticles(List.of(mesh.getParticles()));
 
 			final Map<Particle, List<DistanceConstraint>> distanceConstraintParticleMap = new Object2ObjectOpenHashMap<>();
@@ -246,14 +286,11 @@ public class Scene {
 		}
 	}
 
+
 	@SubscribeEvent
-	public void onGameUpdate(GameUpdateEvent event) {
-		if (isSimulating || simulateOneFrame) {
-			simulateOneFrame = false;
-			PhysicsCompute.simulate();
-			for (MeshedBody mesh : meshes) {
-				mesh.updateBuffers();
-			}
+	public void onPhysicsUpdate(PhysicsUpdateEvent event) {
+		for (IMesh mesh : meshes) {
+			mesh.updateBuffers();
 		}
 	}
 
@@ -263,7 +300,7 @@ public class Scene {
 //			simulateOneFrame = false;
 //			PhysicsCompute.simulate();
 ////			Physics.simulate(bodies, volumeConstraints, PhysicsCompute2.getColoredDistanceConstraints());
-//			for (MeshedBody mesh : meshes) {
+//			for (IMesh mesh : meshes) {
 //				mesh.updateBuffers();
 //			}
 //		}
@@ -281,14 +318,6 @@ public class Scene {
 
 	@SubscribeEvent
 	public void onKeyPressed(KeyDownEvent event) {
-		if (event.action == GLFW.GLFW_PRESS && event.key == GLFW.GLFW_KEY_P) {
-			isSimulating = !isSimulating;
-		}
-		if (event.action == GLFW.GLFW_PRESS && event.key == GLFW.GLFW_KEY_F) {
-			simulateOneFrame = true;
-		}
-		if (event.action == GLFW.GLFW_PRESS && event.key == GLFW.GLFW_KEY_R) {
-			PhysicsCompute.updateParticles();
-		}
+
 	}
 }

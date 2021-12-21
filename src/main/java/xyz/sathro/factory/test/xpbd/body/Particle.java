@@ -1,7 +1,6 @@
 package xyz.sathro.factory.test.xpbd.body;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.ToString;
 import org.joml.Vector3d;
 
@@ -15,10 +14,9 @@ public class Particle implements PhysicsBody {
 	@Getter private double mass = 0.1d;
 	@Getter private double invMass = 1 / mass;
 
-	@Getter @Setter private int index;
+	@Getter private int index;
 
 	public Particle(Vector3d position) {
-		position.y += 1;
 		this.position.set(position);
 		this.prevPosition.set(position);
 	}
@@ -51,4 +49,6 @@ public class Particle implements PhysicsBody {
 	public void updateVelocity(double dtInv) {
 		velocity.set(position).sub(prevPosition).mul(dtInv);
 	}
+
+	public void setIndex(int index) { this.index = index; }
 }

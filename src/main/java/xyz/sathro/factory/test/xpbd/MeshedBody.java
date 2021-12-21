@@ -1,10 +1,7 @@
 package xyz.sathro.factory.test.xpbd;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.ints.IntList;
+import it.unimi.dsi.fastutil.ints.*;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import org.joml.Vector3d;
@@ -21,10 +18,11 @@ import xyz.sathro.vulkan.models.VulkanBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Getter
 @Log4j2
-public class MeshedBody {
+public class MeshedBody implements IMesh {
 	private static final Vector3f color = new Vector3f(0.9f, 0.6f, 0.3f);
 
 	private final Vector3d[] vertices;
@@ -69,15 +67,26 @@ public class MeshedBody {
 
 		final double distanceCompliance = 0.002;
 		final double volumeCompliance = 0.000001;
+		final List<Constraint> constraints = new ObjectArrayList<>(tetrahedra.length * 3);
 
-		final List<Constraint> constraints = new ObjectArrayList<>(tetrahedra.length * 7);
+		final IntSet pairs = new IntOpenHashSet();
+
 		for (Tetrahedron tet : tetrahedra) {
-			constraints.add(new DistanceConstraint(tet.particles[0], tet.particles[1], BodyUtils.getDistance(tet.particles[0], tet.particles[1]), distanceCompliance));
-			constraints.add(new DistanceConstraint(tet.particles[0], tet.particles[2], BodyUtils.getDistance(tet.particles[0], tet.particles[2]), distanceCompliance));
-			constraints.add(new DistanceConstraint(tet.particles[0], tet.particles[3], BodyUtils.getDistance(tet.particles[0], tet.particles[3]), distanceCompliance));
-			constraints.add(new DistanceConstraint(tet.particles[1], tet.particles[2], BodyUtils.getDistance(tet.particles[1], tet.particles[2]), distanceCompliance));
-			constraints.add(new DistanceConstraint(tet.particles[2], tet.particles[3], BodyUtils.getDistance(tet.particles[2], tet.particles[3]), distanceCompliance));
-			constraints.add(new DistanceConstraint(tet.particles[3], tet.particles[0], BodyUtils.getDistance(tet.particles[3], tet.particles[0]), distanceCompliance));
+			for (int i = 0; i < 3; i++) {
+				final Particle p1 = tet.particles[0];
+				final Particle p2 = tet.particles[i + 1];
+				if (!pairs.contains(Objects.hash(p1, p2))) {
+					constraints.add(new DistanceConstraint(p1, p2, BodyUtils.getDistance(p1, p2), distanceCompliance));
+					pairs.add(Objects.hash(p1, p2));
+				}
+
+				final Particle p3 = tet.particles[i + 1];
+				final Particle p4 = tet.particles[(i + 2) % 4];
+				if (!pairs.contains(Objects.hash(p3, p4))) {
+					constraints.add(new DistanceConstraint(p3, p4, BodyUtils.getDistance(p3, p4), distanceCompliance));
+					pairs.add(Objects.hash(p3, p4));
+				}
+			}
 
 			final double restVolume = BodyUtils.getTetVolume(tet.particles[0], tet.particles[1], tet.particles[2], tet.particles[3]);
 			final double pInvMass = restVolume > 0 ? 1 / (restVolume / 4d) : 0;
@@ -97,6 +106,7 @@ public class MeshedBody {
 		updateBuffers();
 	}
 
+	@Override
 	public void updateBuffers() {
 		final long time0 = System.nanoTime();
 		final Int2ObjectMap<Vector3f> map = new Int2ObjectOpenHashMap<>();
@@ -140,8 +150,8 @@ public class MeshedBody {
 //		log.info("Create buffers: {}ms", (System.nanoTime() - time1) / 1_000_000d);
 	}
 
-	@AllArgsConstructor
-	public static class Tetrahedron {
-		public final Particle[] particles;
+	@Override
+	public RayIntersectionResult intersect(Vector3d origin, Vector3d dir) {
+		return RayIntersectionResult.notIntersected();
 	}
 }

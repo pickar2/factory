@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import lombok.extern.log4j.Log4j2;
 import org.lwjgl.system.Configuration;
 import xyz.sathro.factory.event.EventManager;
+import xyz.sathro.factory.test.xpbd.PhysicsController;
 import xyz.sathro.factory.util.Timer;
 import xyz.sathro.factory.vulkan.scene.SceneRenderer;
 import xyz.sathro.factory.window.MouseInput;
@@ -22,19 +23,17 @@ import java.util.concurrent.ConcurrentMap;
 @Log4j2
 public class Engine {
 	public static final int UPDATES_PER_SECOND = 60;
+	public static final double UPS_INV = 1D / UPDATES_PER_SECOND;
 	public static final double MS_PER_UPDATE = 1000.0 / UPDATES_PER_SECOND;
 	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
 
 	private static final Queue<Runnable> taskQueue = new LinkedList<>();
 	private static final Map<Object, Runnable> waitTaskMap = new Object2ObjectOpenHashMap<>();
 
-	private static final Thread renderThread = new Thread(Engine::render);
+	private static final Thread renderThread = new Thread(MainRenderer::renderLoop);
+	private static final Thread physicsThread = new Thread(PhysicsController::physicsUpdateLoop);
 
 	public static boolean debugMode = false;
-
-	private static void render() {
-		MainRenderer.renderLoop();
-	}
 
 	private static void updateLoop() {
 		double lag = 0.0;
@@ -110,9 +109,13 @@ public class Engine {
 			Vulkan.initVulkan(List.of(SceneRenderer.INSTANCE));
 
 			renderThread.setName("render");
+			physicsThread.setName("physics");
+
 			renderThread.start();
+			physicsThread.start();
 			updateLoop();
 			renderThread.join();
+			physicsThread.join();
 
 			Vulkan.cleanup();
 			MouseInput.cleanup();

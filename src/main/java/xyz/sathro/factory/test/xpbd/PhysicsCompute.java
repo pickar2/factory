@@ -17,6 +17,7 @@ import xyz.sathro.factory.test.xpbd.body.Particle;
 import xyz.sathro.factory.test.xpbd.constraint.Constraint;
 import xyz.sathro.factory.test.xpbd.constraint.DistanceConstraint;
 import xyz.sathro.factory.test.xpbd.constraint.TetrahedralVolumeConstraint;
+import xyz.sathro.factory.util.AveragedTimer;
 import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.VulkanCompute;
 import xyz.sathro.vulkan.descriptors.DescriptorPool;
@@ -32,7 +33,6 @@ import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -47,11 +47,9 @@ import static xyz.sathro.vulkan.Vulkan.*;
 
 @Log4j2
 public class PhysicsCompute {
-	public static final LinkedList<Long> list = new LinkedList<>();
+	private static final AveragedTimer timer = new AveragedTimer(60);
 
-	private static final int UPS = 60;
-	private static final double UPS_INV = 1.0 / UPS;
-	private static final int SUBSTEP_COUNT = 15;
+	private static final int SUBSTEP_COUNT = 20;
 	private static final double SUBSTEP_COUNT_INV = 1.0 / SUBSTEP_COUNT;
 
 	private static final int WORKGROUP_COUNT = 32;
@@ -62,7 +60,7 @@ public class PhysicsCompute {
 	private static final int VOLUME_CONSTRAINT_SIZE = Double.BYTES;
 	private static final int VOLUME_CONSTRAINT_INDEX_SIZE = Integer.BYTES * 4;
 
-	private static final List<Particle> particles = new ObjectArrayList<>();
+	@Getter private static final List<Particle> particles = new ObjectArrayList<>();
 
 	@Getter private static final List<DistanceConstraint> distanceConstraints = new ObjectArrayList<>();
 	@Getter private static final Int2ObjectMap<List<DistanceConstraint>> coloredDistanceConstraints = new Int2ObjectOpenHashMap<>();
@@ -73,35 +71,39 @@ public class PhysicsCompute {
 	@Getter private static final Map<Particle, List<Constraint>> particleConstraints = new Object2ObjectOpenHashMap<>();
 	@Getter private static final Object2IntMap<Constraint> constraintColors = new Object2IntOpenHashMap<>();
 
-	private static DescriptorSetLayout particlesDescriptorSetLayout;
-	private static int particleBufferSize;
 	private static VulkanBuffer particleCPUBuffer;
 	private static VulkanBuffer particleGPUBuffer;
+
+	private static DescriptorSetLayout particlesDescriptorSetLayout;
 	private static DescriptorPool particleDescriptorPool;
 	private static DescriptorSet particleDescriptorSet;
 	private static VulkanPipeline integrationPipeline;
 	private static VulkanPipeline velocityPipeline;
 
-	private static DescriptorSetLayout distanceConstraintDescriptorSetLayout;
 	private static VulkanBuffer distanceConstraintIndexStagingBuffer;
 	private static VulkanBuffer distanceConstraintIndexBuffer;
 	private static VulkanBuffer distanceConstraintsStagingBuffer;
 	private static VulkanBuffer distanceConstraintsBuffer;
+
+	private static DescriptorSetLayout distanceConstraintDescriptorSetLayout;
 	private static DescriptorPool distanceConstraintDescriptorPool;
 	private static DescriptorSet distanceConstraintsDescriptorSet;
 	private static VulkanPipeline distanceConstraintPipeline;
 
-	private static DescriptorSetLayout volumeConstraintDescriptorSetLayout;
 	private static VulkanBuffer volumeConstraintIndexStagingBuffer;
 	private static VulkanBuffer volumeConstraintIndexBuffer;
 	private static VulkanBuffer volumeConstraintsStagingBuffer;
 	private static VulkanBuffer volumeConstraintsBuffer;
+
+	private static DescriptorSetLayout volumeConstraintDescriptorSetLayout;
 	private static DescriptorPool volumeConstraintDescriptorPool;
 	private static DescriptorSet volumeConstraintsDescriptorSet;
 	private static VulkanPipeline volumeConstraintPipeline;
 
 	private static CommandPool commandPool;
 	private static VkCommandBuffer commandBuffer;
+	private static CommandPool copyCommandPool;
+	private static VkCommandBuffer copyCommandBuffer;
 
 	static {
 		EventManager.registerListeners(PhysicsCompute.class);
@@ -135,13 +137,22 @@ public class PhysicsCompute {
 //	}
 
 	public static void allocateParticleBuffers() {
-		particleBufferSize = Math.max(16, particles.size()) * PARTICLE_SIZE;
-
 		if (particleCPUBuffer != null) { particleCPUBuffer.registerToDisposal(); }
 		if (particleGPUBuffer != null) { particleGPUBuffer.registerToDisposal(); }
 
-		particleCPUBuffer = Vulkan.createBuffer(particleBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		particleGPUBuffer = Vulkan.createBuffer(particleBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		particleCPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+		particleGPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+		vkResetCommandPool(device, copyCommandPool.handle, 0);
+
+		try (MemoryStack stack = stackPush()) {
+			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+			final VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack).size((long) particles.size() * PARTICLE_SIZE);
+
+			vkBeginCommandBuffer(copyCommandBuffer, beginInfo);
+			vkCmdCopyBuffer(copyCommandBuffer, particleGPUBuffer.handle, particleCPUBuffer.handle, copyRegion);
+			vkEndCommandBuffer(copyCommandBuffer);
+		}
 	}
 
 	public static void allocateConstrainBuffers() {
@@ -161,6 +172,8 @@ public class PhysicsCompute {
 	public static void updateConstraintsBuffers() {
 		try (MemoryStack stack = stackPush()) {
 			final PointerBuffer pointer = stack.mallocPointer(1);
+
+			log.info("{} tetrahedral constraints, {} distance constraints", volumeConstraints.size(), distanceConstraints.size());
 
 			vmaMapMemory(vmaAllocator, distanceConstraintsStagingBuffer.allocation, pointer);
 			{
@@ -205,8 +218,6 @@ public class PhysicsCompute {
 			vmaUnmapMemory(vmaAllocator, volumeConstraintsStagingBuffer.allocation);
 			Vulkan.copyBuffer(volumeConstraintsStagingBuffer, volumeConstraintsBuffer, (long) volumeConstraints.size() * Double.BYTES);
 
-			log.info("{} tets", volumeConstraints.size());
-
 			vmaMapMemory(vmaAllocator, volumeConstraintIndexStagingBuffer.allocation, pointer);
 			{
 				final IntBuffer buffer = memIntBuffer(pointer.get(0), volumeConstraints.size() * 4);
@@ -245,7 +256,7 @@ public class PhysicsCompute {
 				}
 			}
 			vmaUnmapMemory(vmaAllocator, particleCPUBuffer.allocation);
-			Vulkan.copyBuffer(particleCPUBuffer, particleGPUBuffer, particleBufferSize);
+			Vulkan.copyBuffer(particleCPUBuffer, particleGPUBuffer, (long) particles.size() * PARTICLE_SIZE);
 		}
 	}
 
@@ -290,7 +301,7 @@ public class PhysicsCompute {
 			int offset;
 
 			final ByteBuffer pushConstants = stack.malloc(24);
-			pushConstants.putDouble(0, UPS_INV * SUBSTEP_COUNT_INV);
+			pushConstants.putDouble(0, PhysicsController.UPS_INV * SUBSTEP_COUNT_INV);
 
 			final LongBuffer particleDescriptorSetPointer = stack.longs(particleDescriptorSet.getHandle());
 			final LongBuffer distanceConstraintDescriptorSetPointer = stack.longs(distanceConstraintsDescriptorSet.getHandle());
@@ -323,7 +334,7 @@ public class PhysicsCompute {
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// distance constraint
-					pushConstants.putDouble(8, 0.02);
+					pushConstants.putDouble(8, 10);
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.layout, 1, distanceConstraintDescriptorSetPointer, null);
@@ -340,7 +351,7 @@ public class PhysicsCompute {
 					}
 
 					// volume constraint
-					pushConstants.putDouble(8, 0.001);
+					pushConstants.putDouble(8, 0.0001);
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 1, volumeConstraintDescriptorSetPointer, null);
@@ -420,6 +431,9 @@ public class PhysicsCompute {
 
 		commandPool = CommandPool.newDefault(0, queues.compute, false);
 		commandBuffer = CommandBuffers.createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPool.handle);
+
+		copyCommandPool = CommandPool.newDefault(0, queues.transfer, false);
+		copyCommandBuffer = CommandBuffers.createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, copyCommandPool.handle);
 	}
 
 	@SubscribeEvent
@@ -433,14 +447,10 @@ public class PhysicsCompute {
 					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 					.pCommandBuffers(stack.pointers(commandBuffer));
 
-			final long time0 = System.nanoTime();
+			timer.startRecording();
 			queues.compute.submitAndWait(submitInfo, commandPool.fence);
-			list.add(System.nanoTime() - time0);
-			if (list.size() > 60) {
-				list.pop();
-			}
+			timer.endRecording();
 
-//			log.info("Compute: {}ms", list.stream().reduce(0L, Long::sum) / 1_000_000f / list.size());
 			vkResetFences(device, commandPool.fence);
 
 			updateParticles();
@@ -449,23 +459,34 @@ public class PhysicsCompute {
 
 	public static void updateParticles() {
 		try (MemoryStack stack = stackPush()) {
-			// TODO: cache copy command
-			copyBuffer(particleGPUBuffer, particleCPUBuffer, (long) particles.size() * PARTICLE_SIZE);
+			long time0 = System.nanoTime();
+			final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
+					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
+					.pCommandBuffers(stack.pointers(copyCommandBuffer));
+
+			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
+			vkResetFences(device, copyCommandPool.fence);
 
 			final PointerBuffer pointer = stack.mallocPointer(1);
 			vmaMapMemory(vmaAllocator, particleCPUBuffer.allocation, pointer);
 			{
 				final DoubleBuffer buffer = memDoubleBuffer(pointer.get(0), particles.size() * PARTICLE_SIZE);
-				Particle particle;
-				for (int i = 0; i < particles.size(); i++) {
-					particle = particles.get(i);
-					particle.getPosition().set(i * 4 * 4, buffer);
-//					particle.setMass(buffer.get(i * 4 * 4 + 12));
-//					particle.getPrevPosition().set(i * 4 * 4 + 16, buffer);
-//					particle.getVelocity().set(i * 4 * 4 + 32, buffer);
+				int index = 0;
+				for (Particle particle : particles) {
+					particle.getPosition().set(index, buffer);
+//					particle.setMass(buffer.get(index + 12));
+//					particle.getPrevPosition().set(index + 16, buffer);
+//					particle.getVelocity().set(index + 32, buffer);
+
+					index += 4 * 4;
 				}
 			}
 			vmaUnmapMemory(vmaAllocator, particleCPUBuffer.allocation);
+//			log.info("Copying particles: {}ms", (System.nanoTime() - time0) / 1_000_000d);
 		}
+	}
+
+	public static double getComputeTime() {
+		return timer.getAverageTime();
 	}
 }

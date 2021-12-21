@@ -10,7 +10,7 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkCommandBufferBeginInfo;
 import org.lwjgl.vulkan.VkCommandBufferInheritanceInfo;
 import xyz.sathro.factory.test.xpbd.FpsCamera;
-import xyz.sathro.factory.test.xpbd.MeshedBody;
+import xyz.sathro.factory.test.xpbd.IMesh;
 import xyz.sathro.factory.test.xpbd.PhysicsCompute;
 import xyz.sathro.factory.test.xpbd.Scene;
 import xyz.sathro.factory.test.xpbd.body.Particle;
@@ -106,7 +106,7 @@ public class SceneRenderer implements IRenderer {
 				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle);
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, stack.longs(modelPipeline.descriptorSets.get(imageIndex).getHandle()), offset);
 
-				for (MeshedBody mesh : scene.getMeshes()) {
+				for (IMesh mesh : scene.getMeshes()) {
 					vkCmdBindIndexBuffer(commandBuffer, mesh.getIndexBuffer().handle, 0, VK_INDEX_TYPE_UINT32);
 					vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(mesh.getVertexBuffer().handle), offsets);
 
@@ -132,7 +132,7 @@ public class SceneRenderer implements IRenderer {
 
 		CombinedBuffer.Builder builder = CombinedBuffer.builder();
 
-		builder.addVertex(new SceneParticleVertex(new Vector3f(), new Vector3f(0.9f, 0.6f, 0.3f), 25));
+		builder.addVertex(new SceneParticleVertex(new Vector3f(), new Vector3f(0.9f, 0.2f, 0.6f), 25));
 		builder.addIndex(SceneParticleVertex.class, 0);
 
 		particleCombinedBuffer = builder.build();
@@ -218,7 +218,7 @@ public class SceneRenderer implements IRenderer {
 				final ByteBuffer buffer = data.getByteBuffer(0, 65536);
 
 				int index = 0;
-				for (MeshedBody mesh : scene.getMeshes()) {
+				for (IMesh mesh : scene.getMeshes()) {
 					final Matrix4f model = new Matrix4f();
 					model.scale(15, 15, 15);
 //					model.translate(1, 1, 1);
