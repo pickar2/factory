@@ -49,12 +49,11 @@ import static xyz.sathro.vulkan.Vulkan.*;
 public class PhysicsCompute {
 	private static final AveragedTimer timer = new AveragedTimer(60);
 
-	private static final int SUBSTEP_COUNT = 20;
-	private static final double SUBSTEP_COUNT_INV = 1.0 / SUBSTEP_COUNT;
-
 	private static final int WORKGROUP_COUNT = 32;
 
-	private static final int PARTICLE_SIZE = 4 * 4 * 8;
+	private static final int PUSH_CONSTANTS_SIZE = 32;
+
+	private static final int PARTICLE_SIZE = 4 * 4 * Double.BYTES;
 	private static final int DISTANCE_CONSTRAINT_SIZE = Double.BYTES;
 	private static final int DISTANCE_CONSTRAINT_INDEX_SIZE = Integer.BYTES * 2;
 	private static final int VOLUME_CONSTRAINT_SIZE = Double.BYTES;
@@ -300,8 +299,9 @@ public class PhysicsCompute {
 		try (MemoryStack stack = stackPush()) {
 			int offset;
 
-			final ByteBuffer pushConstants = stack.malloc(24);
-			pushConstants.putDouble(0, PhysicsController.UPS_INV * SUBSTEP_COUNT_INV);
+			final ByteBuffer pushConstants = stack.malloc(PUSH_CONSTANTS_SIZE);
+			pushConstants.putDouble(0, PhysicsController.UPS_INV * PhysicsController.SUBSTEP_COUNT_INV);
+			pushConstants.putDouble(8, PhysicsController.UPS * PhysicsController.SUBSTEP_COUNT * PhysicsController.UPS * PhysicsController.SUBSTEP_COUNT);
 
 			final LongBuffer particleDescriptorSetPointer = stack.longs(particleDescriptorSet.getHandle());
 			final LongBuffer distanceConstraintDescriptorSetPointer = stack.longs(distanceConstraintsDescriptorSet.getHandle());
@@ -310,9 +310,9 @@ public class PhysicsCompute {
 			final VkMemoryBarrier2KHR.Buffer memoryBarrier = VkMemoryBarrier2KHR.calloc(1, stack)
 					.sType(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR)
 					.srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
-					.srcAccessMask(VK_ACCESS_2_SHADER_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT_KHR)
+					.srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR)
 					.dstStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
-					.dstAccessMask(VK_ACCESS_2_SHADER_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT_KHR);
+					.dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR);
 
 			final VkDependencyInfoKHR dependencyInfo = VkDependencyInfoKHR.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR)
@@ -324,8 +324,8 @@ public class PhysicsCompute {
 
 			vkBeginCommandBuffer(commandBuffer, beginInfo);
 			{
-				for (int i = 0; i < SUBSTEP_COUNT; i++) {
-					pushConstants.putInt(16, particles.size());
+				for (int i = 0; i < PhysicsController.SUBSTEP_COUNT; i++) {
+					pushConstants.putInt(24, particles.size());
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, integrationPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, integrationPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdPushConstants(commandBuffer, integrationPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
@@ -334,15 +334,15 @@ public class PhysicsCompute {
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// distance constraint
-					pushConstants.putDouble(8, 10);
+					pushConstants.putDouble(16, 10);
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, distanceConstraintPipeline.layout, 1, distanceConstraintDescriptorSetPointer, null);
 
 					offset = 0;
 					for (List<DistanceConstraint> constraints : coloredDistanceConstraints.values()) {
-						pushConstants.putInt(16, constraints.size());
-						pushConstants.putInt(20, offset);
+						pushConstants.putInt(24, constraints.size());
+						pushConstants.putInt(28, offset);
 						vkCmdPushConstants(commandBuffer, distanceConstraintPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 						vkCmdDispatch(commandBuffer, (int) Math.ceil((float) constraints.size() / WORKGROUP_COUNT), 1, 1);
 						vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
@@ -351,15 +351,15 @@ public class PhysicsCompute {
 					}
 
 					// volume constraint
-					pushConstants.putDouble(8, 0.0001);
+					pushConstants.putDouble(16, 0.0001);
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 1, volumeConstraintDescriptorSetPointer, null);
 
 					offset = 0;
 					for (List<TetrahedralVolumeConstraint> constraints : coloredVolumeConstraints.values()) {
-						pushConstants.putInt(16, constraints.size());
-						pushConstants.putInt(20, offset);
+						pushConstants.putInt(24, constraints.size());
+						pushConstants.putInt(28, offset);
 						vkCmdPushConstants(commandBuffer, volumeConstraintPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 						vkCmdDispatch(commandBuffer, (int) Math.ceil((float) constraints.size() / WORKGROUP_COUNT), 1, 1);
 						vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
@@ -368,7 +368,7 @@ public class PhysicsCompute {
 					}
 
 					// update velocities
-					pushConstants.putInt(16, particles.size());
+					pushConstants.putInt(24, particles.size());
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, velocityPipeline.handle);
 					vkCmdPushConstants(commandBuffer, integrationPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, velocityPipeline.layout, 0, particleDescriptorSetPointer, null);
@@ -399,7 +399,7 @@ public class PhysicsCompute {
 
 		final VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stackGet())
 				.stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
-				.size(24);
+				.size(PUSH_CONSTANTS_SIZE);
 
 		integrationPipeline = VulkanCompute.createComputePipeline("shaders/physics/integrate.comp", particlesDescriptorSetLayout, pushConstantRanges);
 		velocityPipeline = VulkanCompute.createComputePipeline("shaders/physics/updateVelocity.comp", particlesDescriptorSetLayout, pushConstantRanges);

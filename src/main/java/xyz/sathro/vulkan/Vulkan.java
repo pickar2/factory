@@ -74,8 +74,8 @@ public class Vulkan {
 	public static final Set<String> INSTANCE_EXTENSIONS = new HashSet<>();
 	public static final Set<String> DEVICE_EXTENSIONS = Stream.of(
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			"VK_KHR_synchronization2",
-			"VK_EXT_shader_atomic_float"
+			"VK_KHR_synchronization2"
+//			"VK_EXT_shader_atomic_float"
 	).collect(toSet());
 	public static final Set<String> VALIDATION_LAYERS = Stream.of(
 			"VK_LAYER_KHRONOS_validation"
@@ -448,7 +448,7 @@ public class Vulkan {
 
 			VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloat = VkPhysicalDeviceShaderAtomicFloatFeaturesEXT.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT)
-					.shaderBufferFloat64AtomicAdd(true);
+					.shaderBufferFloat64AtomicAdd(false);
 
 			VkPhysicalDeviceFeatures2 deviceFeatures2 = VkPhysicalDeviceFeatures2.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)

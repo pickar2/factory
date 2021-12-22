@@ -12,10 +12,13 @@ import xyz.sathro.factory.window.events.KeyDownEvent;
 public class PhysicsController {
 	private static final AveragedTimer timer = new AveragedTimer(60);
 
-	public static final int UPS = 60;
+	public static final int UPS = 30;
 	public static final double UPS_INV = 1.0 / UPS;
 	public static final double MS_PER_UPDATE = 1000.0 / UPS;
 	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
+
+	public static final int SUBSTEP_COUNT = 40;
+	public static final double SUBSTEP_COUNT_INV = 1.0 / SUBSTEP_COUNT;
 
 	private static boolean isSimulating = true;
 	private static boolean simulateOneFrame = false;

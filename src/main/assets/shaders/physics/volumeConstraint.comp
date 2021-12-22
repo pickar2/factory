@@ -10,7 +10,7 @@ struct Particle {
 	dvec4 position_mass;
 	dvec4 prevPosition_invMass;
 	dvec4 velocity_null;
-	dvec4 null;// external force?
+	dvec4 null; // external force?
 };
 
 layout(set = 0, binding = 0) buffer particlesBuffer {
@@ -27,6 +27,7 @@ readonly layout(set = 1, binding = 1) buffer constraintRestVolumes {
 
 readonly layout(push_constant) uniform constants {
 	double dt;
+	double invDtSquared;
 	double compliance;
 	int count;
 	int constraintOffset;
@@ -46,9 +47,9 @@ void main() {
 
 	dvec3[4] grads;
 
-	const uint XPlusOffset = gl_GlobalInvocationID.x + constraintOffset;
+	uint XPlusOffset = gl_GlobalInvocationID.x + constraintOffset;
 
-	const int[] indices = {
+	int[] indices = {
 		particleIndices[XPlusOffset * 4],
 		particleIndices[XPlusOffset * 4 + 1],
 		particleIndices[XPlusOffset * 4 + 2],
@@ -57,9 +58,9 @@ void main() {
 
 	double w = 0;
 	for (int i = 0; i < 4; i++) {
-		const int id0 = indices[idOrder[i][0]];
-		const int id1 = indices[idOrder[i][1]];
-		const int id2 = indices[idOrder[i][2]];
+		int id0 = indices[idOrder[i][0]];
+		int id1 = indices[idOrder[i][1]];
+		int id2 = indices[idOrder[i][2]];
 
 		grads[i] = particles[id1].position_mass.xyz - particles[id0].position_mass.xyz;
 
@@ -69,18 +70,17 @@ void main() {
 	}
 	if (w == 0) return;
 
-	const dvec3 diff0 = particles[indices[1]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
-	const dvec3 diff1 = particles[indices[2]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
-	const dvec3 diff2 = particles[indices[3]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
+	dvec3 diff0 = particles[indices[1]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
+	dvec3 diff1 = particles[indices[2]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
+	dvec3 diff2 = particles[indices[3]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
 
-	const double currentVolume = dot(cross(diff0, diff1), diff2) * ONE_OVER_SIX;
+	double currentVolume = dot(cross(diff0, diff1), diff2) * ONE_OVER_SIX;
 
-	const double s = (restVolumes[XPlusOffset] - currentVolume) / (w + compliance / (dt * dt));
+	double s = (restVolumes[XPlusOffset] - currentVolume) / (w + compliance * invDtSquared);
 
 //	if(abs(s) < 0.0000001) { return; }
 
 	for (int i = 0; i < 4; i++) {
-
 		particles[indices[i]].position_mass.xyz += s * particles[indices[i]].prevPosition_invMass.w * grads[i];
 	}
 }

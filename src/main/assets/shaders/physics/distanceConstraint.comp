@@ -27,29 +27,26 @@ readonly layout(set = 1, binding = 1) buffer constraintRestDistances {
 
 readonly layout(push_constant) uniform constants {
 	double dt;
+	double invDtSquared;
 	double compliance;
 	int count;
 	int	constraintOffset;
 };
 
-
 void main() {
 	if (gl_GlobalInvocationID.x >= count) return;
 
-	const int index1 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2];
-	const int index2 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2 + 1];
+	int index1 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2];
+	int index2 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2 + 1];
 
-	const Particle p1 = particles[index1];
-	const Particle p2 = particles[index2];
-
-	const dvec3 distanceVector = p2.position_mass.xyz - p1.position_mass.xyz;
-	const double distanceDifference = length(distanceVector) - restDistances[gl_GlobalInvocationID.x + constraintOffset];
+	dvec3 distanceVector = particles[index2].position_mass.xyz - particles[index1].position_mass.xyz;
+	double distanceDifference = length(distanceVector) - restDistances[gl_GlobalInvocationID.x + constraintOffset];
 
 //	if (abs(distanceDifference) < 0.00001) return;
 
-	const double lambda = 1.0 / (p1.prevPosition_invMass.w + p2.prevPosition_invMass.w + compliance / (dt * dt));
-	const dvec3 normalizedPositionDifference = normalize(distanceVector) * (lambda * distanceDifference);
+	double lambda = 1.0 / (particles[index1].prevPosition_invMass.w + particles[index2].prevPosition_invMass.w + compliance * invDtSquared);
+	dvec3 normalizedPositionDifference = normalize(distanceVector) * (lambda * distanceDifference);
 
-	particles[index1].position_mass.xyz += p1.prevPosition_invMass.w * normalizedPositionDifference;
-	particles[index2].position_mass.xyz -= p2.prevPosition_invMass.w * normalizedPositionDifference;
+	particles[index1].position_mass.xyz += particles[index1].prevPosition_invMass.w * normalizedPositionDifference;
+	particles[index2].position_mass.xyz -= particles[index2].prevPosition_invMass.w * normalizedPositionDifference;
 }

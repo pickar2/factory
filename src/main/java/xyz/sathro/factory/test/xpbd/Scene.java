@@ -4,9 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import it.unimi.dsi.fastutil.objects.*;
 import lombok.Getter;
 import org.joml.Vector3d;
 import org.lwjgl.system.MemoryUtil;
@@ -34,7 +32,7 @@ public class Scene {
 	@Getter private final FpsCamera camera = new FpsCamera();
 
 	@Getter private final List<PhysicsBody> bodies = new ObjectArrayList<>();
-	@Getter private final List<TetrahedralVolumeConstraint> volumeConstraints;
+//	@Getter private final List<TetrahedralVolumeConstraint> volumeConstraints;
 //	@Getter private final Int2ObjectMap<List<DistanceConstraint>> distanceConstraints;
 
 	@Getter private final List<IMesh> meshes = new ObjectArrayList<>();
@@ -72,40 +70,6 @@ public class Scene {
 		for (int i = 0; i < bodies.size(); i++) {
 			bodies.get(i).setIndex(i);
 		}
-
-//		constraints.addAll(body.getConstraints());
-
-//		final Map<Particle, List<DistanceConstraint>> distanceConstraintParticleMap = new Object2ObjectOpenHashMap<>();
-//		for (Particle particle : body.getParticles()) {
-//			distanceConstraintParticleMap.put(particle, new ObjectArrayList<>());
-//		}
-//
-//		final Map<Particle, List<TetrahedralVolumeConstraint>> volumeConstraintParticleMap = new Object2ObjectOpenHashMap<>();
-//		for (Particle particle : body.getParticles()) {
-//			volumeConstraintParticleMap.put(particle, new ObjectArrayList<>());
-//		}
-
-//		final List<DistanceConstraint> distanceConstraints = new ObjectArrayList<>();
-		final List<TetrahedralVolumeConstraint> volumeConstraints = new ObjectArrayList<>();
-//
-		for (Constraint constraint : body.getConstraints()) {
-			if (constraint instanceof DistanceConstraint distanceConstraint) {
-//				distanceConstraints.add(distanceConstraint);
-////				distanceConstraintParticleMap.get(distanceConstraint.getBody1()).add(distanceConstraint);
-////				distanceConstraintParticleMap.get(distanceConstraint.getBody2()).add(distanceConstraint);
-			} else if (constraint instanceof TetrahedralVolumeConstraint volumeConstraint) {
-				volumeConstraints.add(volumeConstraint);
-////				volumeConstraintParticleMap.get(volumeConstraint.getParticles()[0]).add(volumeConstraint);
-////				volumeConstraintParticleMap.get(volumeConstraint.getParticles()[1]).add(volumeConstraint);
-////				volumeConstraintParticleMap.get(volumeConstraint.getParticles()[2]).add(volumeConstraint);
-////				volumeConstraintParticleMap.get(volumeConstraint.getParticles()[3]).add(volumeConstraint);
-			}
-		}
-//		final Int2ObjectMap<List<DistanceConstraint>> coloredConstraintsMap = colorizeConstraints(distanceConstraints);
-//		final Int2ObjectMap<List<TetrahedralVolumeConstraint>> coloredVolumeConstraintsMap = colorConstraints(volumeConstraintParticleMap, body.getParticles());
-
-		this.volumeConstraints = volumeConstraints;
-//		this.distanceConstraints = coloredConstraintsMap;
 	}
 
 	private static <E extends Constraint> Int2ObjectMap<List<E>> colorizeConstraints(List<E> constraints) {
@@ -256,11 +220,59 @@ public class Scene {
 				}
 			}
 
-			Collections.shuffle(distanceConstraints);
-			Collections.shuffle(volumeConstraints);
+			final Set<Constraint> alreadyInL = new ObjectOpenHashSet<>();
+			final List<TetrahedralVolumeConstraint> sortedVolumeConstraints = new LinkedList<>();
+
+			final Object2IntMap<Constraint> d = new Object2IntOpenHashMap<>();
+
+			final Int2ObjectMap<LinkedList<TetrahedralVolumeConstraint>> D = new Int2ObjectOpenHashMap<>();
+
+			int maxDV = 0;
+			for (TetrahedralVolumeConstraint distanceConstraint : volumeConstraints) {
+				final int dI = distanceConstraint.getConstrainedParticles().stream().mapToInt(p -> (int) (constraintParticleMap.get(p).stream().filter(constraint1 -> constraint1 instanceof TetrahedralVolumeConstraint).distinct().count() - 1)).reduce(0, Integer::sum);
+				d.put(distanceConstraint, dI);
+				maxDV = Math.max(maxDV, dI);
+
+				if (!D.containsKey(dI)) {
+					D.put(dI, new LinkedList<>());
+				}
+				D.get(dI).add(distanceConstraint);
+			}
+
+			for (int i = 0; i < maxDV; i++) {
+				if (!D.containsKey(i)) {
+					D.put(i, new LinkedList<>());
+				}
+			}
+
+			int k = 0;
+
+			for (int i = 0; i < volumeConstraints.size(); i++) {
+				for (int j = 0; j < maxDV; j++) {
+					if (!D.get(j).isEmpty()) {
+						k = Math.max(k, j);
+						final TetrahedralVolumeConstraint v = D.get(j).pop();
+						sortedVolumeConstraints.add(v);
+						alreadyInL.add(v);
+
+						final List<Constraint> neighbors = v.getConstrainedParticles().stream().flatMap(p -> constraintParticleMap.get(p).stream().filter(c -> c instanceof TetrahedralVolumeConstraint)).toList();
+
+						for (Constraint w : neighbors) {
+							if (!alreadyInL.contains(w)) {
+								D.get(d.getInt(w)).remove(w);
+								d.put(w, d.getInt(w) - 1);
+								D.get(d.getInt(w)).add((TetrahedralVolumeConstraint) w);
+							}
+						}
+					}
+				}
+			}
 
 			final Int2ObjectMap<List<DistanceConstraint>> coloredDistanceConstraintsMap = colorizeConstraints(distanceConstraints);
-			final Int2ObjectMap<List<TetrahedralVolumeConstraint>> coloredVolumeConstraintsMap = colorizeConstraints(volumeConstraints);
+			final Int2ObjectMap<List<TetrahedralVolumeConstraint>> coloredVolumeConstraintsMap = colorizeConstraints(sortedVolumeConstraints);
+
+//			System.out.println(coloredDistanceConstraintsMap.keySet().size());
+//			System.out.println(coloredVolumeConstraintsMap.keySet().size());
 
 			for (Int2ObjectMap.Entry<List<DistanceConstraint>> entry : coloredDistanceConstraintsMap.int2ObjectEntrySet()) {
 				for (DistanceConstraint constraint : entry.getValue()) {
@@ -273,7 +285,6 @@ public class Scene {
 					PhysicsCompute.getConstraintColors().put(constraint, entry.getIntKey());
 				}
 			}
-
 			PhysicsCompute.getParticleConstraints().putAll(constraintParticleMap);
 
 			PhysicsCompute.getColoredDistanceConstraints().putAll(coloredDistanceConstraintsMap);
@@ -285,7 +296,6 @@ public class Scene {
 			PhysicsCompute.updateConstraints();
 		}
 	}
-
 
 	@SubscribeEvent
 	public void onPhysicsUpdate(PhysicsUpdateEvent event) {
