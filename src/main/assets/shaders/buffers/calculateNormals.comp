@@ -1,0 +1,115 @@
+#version 460
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_gpu_shader_fp64 : enable
+#extension GL_EXT_shader_atomic_float : enable
+
+#define WORKGROUP_SIZE 32
+
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+struct Particle {
+	dvec3 position;
+	double mass;
+	dvec3 prevPosition;
+	double invMass;
+	dvec3 velocity;
+	double null;
+//	dvec4 null; // external force?
+};
+
+struct AttachedVertex {
+	int tetIndex;
+	float baryX;
+	float baryY;
+	float baryZ;
+};
+
+struct Vertex {
+	float posX;
+	float posY;
+	float posZ;
+
+	float colorR;
+	float colorG;
+	float colorB;
+
+	float normalX;
+	float normalY;
+	float normalZ;
+};
+
+layout(std430, set = 0, binding = 0) buffer particlesBuffer {
+	Particle[] particles;
+};
+
+readonly layout(set = 1, binding = 0) buffer attachedVertices {
+	AttachedVertex[] modelVertices;
+};
+
+readonly layout(set = 1, binding = 1) buffer tetrahedraParticleIndices {
+	int[] indices;
+};
+
+readonly layout(set = 1, binding = 2) buffer modelVertexIndices {
+	int[] modelIndices;
+};
+
+layout(std430, set = 1, binding = 3) buffer vertexBuffer {
+	Vertex[] vertices;
+};
+
+readonly layout(push_constant) uniform constants {
+	double dt;
+	double invDtSquared;
+	double compliance;
+	int count;
+	int	constraintOffset;
+};
+
+void main() {
+	if (gl_GlobalInvocationID.x >= count) return;
+
+	int index1 = modelIndices[gl_GlobalInvocationID.x * 3];
+	int index2 = modelIndices[gl_GlobalInvocationID.x * 3 + 1];
+	int index3 = modelIndices[gl_GlobalInvocationID.x * 3 + 2];
+
+	vec3 edge1 = vec3(vertices[index3].posX - vertices[index1].posX, vertices[index3].posY - vertices[index1].posY, vertices[index3].posZ - vertices[index1].posZ);
+	vec3 edge2 = vec3(vertices[index2].posX - vertices[index1].posX, vertices[index2].posY - vertices[index1].posY, vertices[index2].posZ - vertices[index1].posZ);
+
+	vec3 normal = normalize(cross(edge2, edge1));
+
+	atomicAdd(vertices[index1].normalX, normal.x);
+	atomicAdd(vertices[index1].normalY, normal.y);
+	atomicAdd(vertices[index1].normalZ, normal.z);
+
+	atomicAdd(vertices[index2].normalX, normal.x);
+	atomicAdd(vertices[index2].normalY, normal.y);
+	atomicAdd(vertices[index2].normalZ, normal.z);
+
+	atomicAdd(vertices[index3].normalX, normal.x);
+	atomicAdd(vertices[index3].normalY, normal.y);
+	atomicAdd(vertices[index3].normalZ, normal.z);
+
+	/*
+	int index1, index2, index3;
+	final Vector3d temp1 = new Vector3d();
+	final Vector3d temp2 = new Vector3d();
+	final Vector3f temp3 = new Vector3f();
+	for (int i = 0; i < modelIndices.size(); i += 3) {
+		index1 = modelIndices.getInt(i);
+		index2 = modelIndices.getInt(i + 1);
+		index3 = modelIndices.getInt(i + 2);
+
+		final Vector3d v1 = surfacePositions[index1];
+		final Vector3d v2 = surfacePositions[index2];
+		final Vector3d v3 = surfacePositions[index3];
+
+		final Vector3d edge2 = v3.sub(v1, temp1);
+		final Vector3f normal = v2.sub(v1, temp2).cross(edge2).normalize().get(temp3);
+
+		normalMap[index1].add(normal);
+		normalMap[index2].add(normal);
+		normalMap[index3].add(normal);
+	}
+	*/
+}

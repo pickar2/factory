@@ -7,13 +7,16 @@
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-	dvec4 position_mass;
-	dvec4 prevPosition_invMass;
-	dvec4 velocity_null;
-	dvec4 null; // external force?
+	dvec3 position;
+	double mass;
+	dvec3 prevPosition;
+	double invMass;
+	dvec3 velocity;
+	double null;
+//	dvec4 null; // external force?
 };
 
-layout(set = 0, binding = 0) buffer particlesBuffer {
+layout(std430, set = 0, binding = 0) buffer particlesBuffer {
 	Particle[] particles;
 };
 
@@ -28,7 +31,7 @@ readonly layout(push_constant) uniform constants {
 void main() {
 	if (gl_GlobalInvocationID.x >= count) return;
 
-	particles[gl_GlobalInvocationID.x].velocity_null.xyz = (particles[gl_GlobalInvocationID.x].position_mass.xyz - particles[gl_GlobalInvocationID.x].prevPosition_invMass.xyz) / dt;
+	particles[gl_GlobalInvocationID.x].velocity = (particles[gl_GlobalInvocationID.x].position - particles[gl_GlobalInvocationID.x].prevPosition) / dt;
 
 	/*
 	velocity.set(position).sub(prevPosition).mul(dtInv);

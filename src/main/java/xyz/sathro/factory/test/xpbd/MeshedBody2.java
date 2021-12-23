@@ -27,10 +27,10 @@ public class MeshedBody2 implements IMesh {
 
 	@Getter private final Particle[] particles;
 	@Getter private final List<Constraint> constraints;
-	private final Tetrahedron[] tetrahedra;
+	@Getter private final Tetrahedron[] tetrahedra;
 
-	private final List<AttachedVertex> modelVertices;
-	private final IntList modelIndices;
+	@Getter private final List<AttachedVertex> modelVertices;
+	@Getter private final IntList modelIndices;
 
 	//	private final List<Vector3d> surfacePositions;
 	private final Vector3d[] surfacePositions;
@@ -105,7 +105,7 @@ public class MeshedBody2 implements IMesh {
 			normalMap[i] = new Vector3f();
 		}
 
-		updateBuffers();
+//		updateBuffers();
 	}
 
 	@Override

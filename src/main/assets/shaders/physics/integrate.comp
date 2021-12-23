@@ -7,13 +7,16 @@
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-	dvec4 position_mass;
-	dvec4 prevPosition_invMass;
-	dvec4 velocity_null;
-	dvec4 null; // external force?
+	dvec3 position;
+	double mass;
+	dvec3 prevPosition;
+	double invMass;
+	dvec3 velocity;
+	double null;
+//	dvec4 null; // external force?
 };
 
-layout(set = 0, binding = 0) buffer particlesBuffer {
+layout(std430, set = 0, binding = 0) buffer particlesBuffer {
 	Particle[] particles;
 };
 
@@ -30,15 +33,15 @@ void main() {
 
 	const uint id = gl_GlobalInvocationID.x;
 
-	particles[id].prevPosition_invMass.xyz = particles[id].position_mass.xyz;
-	particles[id].velocity_null.y -= dt * 9.8; // gravity
-	particles[id].position_mass.xyz += dt * particles[id].velocity_null.xyz;
+	particles[id].prevPosition = particles[id].position;
+	particles[id].velocity.y -= dt * 9.8; // gravity
+	particles[id].position += dt * particles[id].velocity;
 
 //	particles[id].position_mass.y *= double(particles[id].position_mass.y >= 0);
 
-	if (particles[id].position_mass.y < 0) {
-		particles[id].position_mass.xz = particles[id].prevPosition_invMass.xz;
-		particles[id].position_mass.y = 0;
+	if (particles[id].position.y < 0) {
+		particles[id].position.xz = particles[id].prevPosition.xz;
+		particles[id].position.y = 0;
 	}
 
 	/*

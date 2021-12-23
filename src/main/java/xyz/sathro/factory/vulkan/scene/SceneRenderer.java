@@ -5,10 +5,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.VK10;
-import org.lwjgl.vulkan.VkCommandBuffer;
-import org.lwjgl.vulkan.VkCommandBufferBeginInfo;
-import org.lwjgl.vulkan.VkCommandBufferInheritanceInfo;
+import org.lwjgl.vulkan.*;
 import xyz.sathro.factory.test.xpbd.FpsCamera;
 import xyz.sathro.factory.test.xpbd.IMesh;
 import xyz.sathro.factory.test.xpbd.PhysicsCompute;
@@ -29,6 +26,7 @@ import java.util.Arrays;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.util.vma.Vma.vmaMapMemory;
 import static org.lwjgl.util.vma.Vma.vmaUnmapMemory;
+import static org.lwjgl.vulkan.KHRSynchronization2.*;
 import static org.lwjgl.vulkan.VK10.*;
 
 @Log4j2
@@ -76,6 +74,17 @@ public class SceneRenderer implements IRenderer {
 
 			final VkCommandBuffer commandBuffer = commandBuffers[imageIndex][0];
 
+			final VkMemoryBarrier2KHR.Buffer memoryBarrier = VkMemoryBarrier2KHR.calloc(1, stack)
+					.sType(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR)
+					.srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
+					.srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR)
+					.dstStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
+					.dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR);
+
+			final VkDependencyInfoKHR dependencyInfo = VkDependencyInfoKHR.calloc(stack)
+					.sType(VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR)
+					.pMemoryBarriers(memoryBarrier);
+
 			final VkCommandBufferInheritanceInfo inheritanceInfo = VkCommandBufferInheritanceInfo.calloc(stack)
 					.renderPass(Vulkan.renderPass)
 					.framebuffer(Vulkan.swapChainFramebuffers.getLong(imageIndex))
@@ -108,9 +117,11 @@ public class SceneRenderer implements IRenderer {
 
 				for (IMesh mesh : scene.getMeshes()) {
 					vkCmdBindIndexBuffer(commandBuffer, mesh.getIndexBuffer().handle, 0, VK_INDEX_TYPE_UINT32);
-					vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(mesh.getVertexBuffer().handle), offsets);
+					vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(PhysicsCompute.getVertexBuffer().handle), offsets);
 
+//					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 					vkCmdDrawIndexed(commandBuffer, mesh.getIndexCount(), 1, 0, 0, 0);
+//					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 				}
 			}
 

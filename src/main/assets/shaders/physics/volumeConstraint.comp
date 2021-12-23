@@ -7,13 +7,16 @@
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-	dvec4 position_mass;
-	dvec4 prevPosition_invMass;
-	dvec4 velocity_null;
-	dvec4 null; // external force?
+	dvec3 position;
+	double mass;
+	dvec3 prevPosition;
+	double invMass;
+	dvec3 velocity;
+	double null;
+//	dvec4 null; // external force?
 };
 
-layout(set = 0, binding = 0) buffer particlesBuffer {
+layout(std430, set = 0, binding = 0) buffer particlesBuffer {
 	Particle[] particles;
 };
 
@@ -62,17 +65,17 @@ void main() {
 		int id1 = indices[idOrder[i][1]];
 		int id2 = indices[idOrder[i][2]];
 
-		grads[i] = particles[id1].position_mass.xyz - particles[id0].position_mass.xyz;
+		grads[i] = particles[id1].position - particles[id0].position;
 
-		grads[i] = cross(grads[i], particles[id2].position_mass.xyz - particles[id0].position_mass.xyz) * ONE_OVER_SIX;
+		grads[i] = cross(grads[i], particles[id2].position - particles[id0].position) * ONE_OVER_SIX;
 
-		w += particles[indices[i]].prevPosition_invMass.w * dot(grads[i], grads[i]);
+		w += particles[indices[i]].invMass * dot(grads[i], grads[i]);
 	}
 	if (w == 0) return;
 
-	dvec3 diff0 = particles[indices[1]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
-	dvec3 diff1 = particles[indices[2]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
-	dvec3 diff2 = particles[indices[3]].position_mass.xyz - particles[indices[0]].position_mass.xyz;
+	dvec3 diff0 = particles[indices[1]].position - particles[indices[0]].position;
+	dvec3 diff1 = particles[indices[2]].position - particles[indices[0]].position;
+	dvec3 diff2 = particles[indices[3]].position - particles[indices[0]].position;
 
 	double currentVolume = dot(cross(diff0, diff1), diff2) * ONE_OVER_SIX;
 
@@ -81,6 +84,6 @@ void main() {
 //	if(abs(s) < 0.0000001) { return; }
 
 	for (int i = 0; i < 4; i++) {
-		particles[indices[i]].position_mass.xyz += s * particles[indices[i]].prevPosition_invMass.w * grads[i];
+		particles[indices[i]].position += s * particles[indices[i]].invMass * grads[i];
 	}
 }

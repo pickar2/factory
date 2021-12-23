@@ -7,13 +7,16 @@
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-	dvec4 position_mass;
-	dvec4 prevPosition_invMass;
-	dvec4 velocity_null;
-	dvec4 null; // external force?
+	dvec3 position;
+	double mass;
+	dvec3 prevPosition;
+	double invMass;
+	dvec3 velocity;
+	double null;
+//	dvec4 null; // external force?
 };
 
-layout(set = 0, binding = 0) buffer particlesBuffer {
+layout(std430, set = 0, binding = 0) buffer particlesBuffer {
 	Particle[] particles;
 };
 
@@ -39,14 +42,14 @@ void main() {
 	int index1 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2];
 	int index2 = particleIndices[(gl_GlobalInvocationID.x + constraintOffset) * 2 + 1];
 
-	dvec3 distanceVector = particles[index2].position_mass.xyz - particles[index1].position_mass.xyz;
+	dvec3 distanceVector = particles[index2].position - particles[index1].position;
 	double distanceDifference = length(distanceVector) - restDistances[gl_GlobalInvocationID.x + constraintOffset];
 
 //	if (abs(distanceDifference) < 0.00001) return;
 
-	double lambda = 1.0 / (particles[index1].prevPosition_invMass.w + particles[index2].prevPosition_invMass.w + compliance * invDtSquared);
+	double lambda = 1.0 / (particles[index1].invMass + particles[index2].invMass + compliance * invDtSquared);
 	dvec3 normalizedPositionDifference = normalize(distanceVector) * (lambda * distanceDifference);
 
-	particles[index1].position_mass.xyz += particles[index1].prevPosition_invMass.w * normalizedPositionDifference;
-	particles[index2].position_mass.xyz -= particles[index2].prevPosition_invMass.w * normalizedPositionDifference;
+	particles[index1].position += particles[index1].invMass * normalizedPositionDifference;
+	particles[index2].position -= particles[index2].invMass * normalizedPositionDifference;
 }

@@ -59,8 +59,6 @@ public class MainRenderer {
 		renderers.addAll(newRenderers);
 		renderers.forEach(IRenderer::init);
 
-//		VulkanCompute.mandelbrot();
-
 		primaryCommandBuffers = CommandBuffers.createCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, Vulkan.swapChainImageCount, commandPool);
 		createSyncObjects();
 	}

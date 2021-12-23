@@ -22,14 +22,19 @@ import xyz.sathro.factory.window.Window;
 import xyz.sathro.factory.window.events.KeyDownEvent;
 import xyz.sathro.factory.window.events.MouseClickEvent;
 import xyz.sathro.vulkan.events.DrawFrameEvent;
+import xyz.sathro.vulkan.events.VulkanDisposeEvent;
 
 import java.io.IOException;
 import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Scene {
 	@Getter private final FpsCamera camera = new FpsCamera();
+
+	private final ExecutorService threadPool = Executors.newFixedThreadPool(1);
 
 	@Getter private final List<PhysicsBody> bodies = new ObjectArrayList<>();
 //	@Getter private final List<TetrahedralVolumeConstraint> volumeConstraints;
@@ -294,14 +299,28 @@ public class Scene {
 			PhysicsCompute.getVolumeConstraints().addAll(volumeConstraints);
 
 			PhysicsCompute.updateConstraints();
+
+			PhysicsCompute.allocateModelBuffers((MeshedBody2) mesh);
+			PhysicsCompute.updateModelBuffers((MeshedBody2) mesh);
+			PhysicsCompute.updateBuffersDescriptorSet();
+
+			PhysicsCompute.fillCommandBuffer();
+			PhysicsCompute.ready = true;
 		}
 	}
 
 	@SubscribeEvent
 	public void onPhysicsUpdate(PhysicsUpdateEvent event) {
-		for (IMesh mesh : meshes) {
-			mesh.updateBuffers();
-		}
+//		threadPool.submit(() -> { // FIXME: if compute finishes faster than buffers are updated there will be problems
+//			for (IMesh mesh : meshes) {
+//				mesh.updateBuffers();
+//			}
+//		});
+	}
+
+	@SubscribeEvent
+	public void onVulkanDispose(VulkanDisposeEvent event) {
+		threadPool.shutdown();
 	}
 
 	@SubscribeEvent
