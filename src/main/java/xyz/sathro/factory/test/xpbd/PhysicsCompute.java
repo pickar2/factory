@@ -123,7 +123,7 @@ public class PhysicsCompute {
 
 	private static CommandPool commandPool;
 	private static VkCommandBuffer commandBuffer;
-	private static CommandPool copyCommandPool;
+	public static CommandPool copyCommandPool;
 	private static VkCommandBuffer copyCommandBuffer;
 
 	public static boolean ready = false;
@@ -165,17 +165,6 @@ public class PhysicsCompute {
 
 		particleCPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 		particleGPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-		vkResetCommandPool(device, copyCommandPool.handle, 0);
-
-		try (MemoryStack stack = stackPush()) {
-			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
-			final VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack).size((long) particles.size() * PARTICLE_SIZE);
-
-			vkBeginCommandBuffer(copyCommandBuffer, beginInfo);
-			vkCmdCopyBuffer(copyCommandBuffer, particleGPUBuffer.handle, particleCPUBuffer.handle, copyRegion);
-			vkEndCommandBuffer(copyCommandBuffer);
-		}
 	}
 
 	public static void allocateConstrainBuffers() {
@@ -209,6 +198,17 @@ public class PhysicsCompute {
 		vertexStagingBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 		localVertexBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 		vertexBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+		vkResetCommandPool(device, copyCommandPool.handle, 0);
+
+		try (MemoryStack stack = stackPush()) {
+			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+			final VkBufferCopy.Buffer vertexCopyRegion = VkBufferCopy.calloc(1, stack).size(vertexBufferSize);
+
+			vkBeginCommandBuffer(copyCommandBuffer, beginInfo);
+			vkCmdCopyBuffer(copyCommandBuffer, localVertexBuffer.handle, vertexBuffer.handle, vertexCopyRegion);
+			vkEndCommandBuffer(copyCommandBuffer);
+		}
 	}
 
 	public static void updateConstraintsBuffers() {
@@ -536,9 +536,7 @@ public class PhysicsCompute {
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
-					// update render buffer
-					final VkBufferCopy.Buffer vertexCopyRegion = VkBufferCopy.calloc(1, stack).size(vertexBufferSize);
-					vkCmdCopyBuffer(commandBuffer, localVertexBuffer.handle, vertexBuffer.handle, vertexCopyRegion);
+					// update particle buffer
 
 					final VkBufferCopy.Buffer particlesCopyRegion = VkBufferCopy.calloc(1, stack).size((long) particles.size() * PARTICLE_SIZE);
 					vkCmdCopyBuffer(commandBuffer, particleGPUBuffer.handle, particleCPUBuffer.handle, particlesCopyRegion);
@@ -627,7 +625,7 @@ public class PhysicsCompute {
 		commandPool = CommandPool.newDefault(0, queues.compute, false);
 		commandBuffer = CommandBuffers.createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPool.handle);
 
-		copyCommandPool = CommandPool.newDefault(0, queues.transfer, false);
+		copyCommandPool = CommandPool.newDefault(0, queues.transfer, true);
 		copyCommandBuffer = CommandBuffers.createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, copyCommandPool.handle);
 	}
 
@@ -656,12 +654,12 @@ public class PhysicsCompute {
 	public static void updateParticles() {
 		try (MemoryStack stack = stackPush()) {
 			long time0 = System.nanoTime();
-//			final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
-//					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
-//					.pCommandBuffers(stack.pointers(copyCommandBuffer));
+			final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
+					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
+					.pCommandBuffers(stack.pointers(copyCommandBuffer));
 
-//			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
-//			vkResetFences(device, copyCommandPool.fence);
+			vkResetFences(device, copyCommandPool.fence);
+			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
 
 			final PointerBuffer pointer = stack.mallocPointer(1);
 			vmaMapMemory(vmaAllocator, particleCPUBuffer.allocation, pointer);
