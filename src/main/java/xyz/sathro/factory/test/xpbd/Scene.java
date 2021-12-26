@@ -233,15 +233,15 @@ public class Scene {
 			final Int2ObjectMap<LinkedList<TetrahedralVolumeConstraint>> D = new Int2ObjectOpenHashMap<>();
 
 			int maxDV = 0;
-			for (TetrahedralVolumeConstraint distanceConstraint : volumeConstraints) {
-				final int dI = distanceConstraint.getConstrainedParticles().stream().mapToInt(p -> (int) (constraintParticleMap.get(p).stream().filter(constraint1 -> constraint1 instanceof TetrahedralVolumeConstraint).distinct().count() - 1)).reduce(0, Integer::sum);
-				d.put(distanceConstraint, dI);
+			for (TetrahedralVolumeConstraint constraint : volumeConstraints) {
+				final int dI = constraint.getConstrainedParticles().stream().mapToInt(p -> (int) (constraintParticleMap.get(p).stream().filter(constraint1 -> constraint1 instanceof TetrahedralVolumeConstraint).distinct().count() - 1)).reduce(0, Integer::sum);
+				d.put(constraint, dI);
 				maxDV = Math.max(maxDV, dI);
 
 				if (!D.containsKey(dI)) {
 					D.put(dI, new LinkedList<>());
 				}
-				D.get(dI).add(distanceConstraint);
+				D.get(dI).add(constraint);
 			}
 
 			for (int i = 0; i < maxDV; i++) {

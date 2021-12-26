@@ -468,7 +468,7 @@ public class PhysicsCompute {
 					}
 
 					// volume constraint
-					pushConstants.putDouble(16, 0.0001);
+					pushConstants.putDouble(16, 0.00001);
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.handle);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volumeConstraintPipeline.layout, 1, volumeConstraintDescriptorSetPointer, null);
@@ -506,6 +506,7 @@ public class PhysicsCompute {
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
+					// zero normals
 					pushConstants.putInt(24, modelVerticesBufferSize / (Integer.BYTES + 3 * Float.BYTES));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersZeroNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersZeroNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
@@ -515,6 +516,7 @@ public class PhysicsCompute {
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
+					// calculate normals
 					pushConstants.putInt(24, modelIndexBufferSize / (Integer.BYTES * 3));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersCalculateNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersCalculateNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
@@ -524,6 +526,7 @@ public class PhysicsCompute {
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
+					// normalize normals
 					pushConstants.putInt(24, vertexBufferSize / (9 * Float.BYTES));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersFinishNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersFinishNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
@@ -533,9 +536,12 @@ public class PhysicsCompute {
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
-					final VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack).size(vertexBufferSize);
+					// update render buffer
+					final VkBufferCopy.Buffer vertexCopyRegion = VkBufferCopy.calloc(1, stack).size(vertexBufferSize);
+					vkCmdCopyBuffer(commandBuffer, localVertexBuffer.handle, vertexBuffer.handle, vertexCopyRegion);
 
-					vkCmdCopyBuffer(commandBuffer, localVertexBuffer.handle, vertexBuffer.handle, copyRegion);
+					final VkBufferCopy.Buffer particlesCopyRegion = VkBufferCopy.calloc(1, stack).size((long) particles.size() * PARTICLE_SIZE);
+					vkCmdCopyBuffer(commandBuffer, particleGPUBuffer.handle, particleCPUBuffer.handle, particlesCopyRegion);
 				}
 			}
 			vkEndCommandBuffer(commandBuffer);
@@ -643,19 +649,19 @@ public class PhysicsCompute {
 
 			vkResetFences(device, commandPool.fence);
 
-//			updateParticles();
+			updateParticles();
 		}
 	}
 
 	public static void updateParticles() {
 		try (MemoryStack stack = stackPush()) {
 			long time0 = System.nanoTime();
-			final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
-					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
-					.pCommandBuffers(stack.pointers(copyCommandBuffer));
+//			final VkSubmitInfo.Buffer submitInfo = VkSubmitInfo.calloc(1, stack)
+//					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
+//					.pCommandBuffers(stack.pointers(copyCommandBuffer));
 
-			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
-			vkResetFences(device, copyCommandPool.fence);
+//			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
+//			vkResetFences(device, copyCommandPool.fence);
 
 			final PointerBuffer pointer = stack.mallocPointer(1);
 			vmaMapMemory(vmaAllocator, particleCPUBuffer.allocation, pointer);

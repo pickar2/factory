@@ -17,7 +17,7 @@ public class PhysicsController {
 	public static final double MS_PER_UPDATE = 1000.0 / UPS;
 	public static final double MS_PER_UPDATE_INV = 1 / MS_PER_UPDATE;
 
-	public static final int SUBSTEP_COUNT = 40;
+	public static final int SUBSTEP_COUNT = 20;
 	public static final double SUBSTEP_COUNT_INV = 1.0 / SUBSTEP_COUNT;
 
 	private static boolean isSimulating = true;

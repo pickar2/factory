@@ -56,6 +56,47 @@ public class MeshedBody2 implements IMesh {
 					particles[tetIndices.getInt(i * 4 + 3)]
 			});
 		}
+
+//		final List<Tetrahedron> tetrahedronList = new ObjectArrayList<>(tets);
+//
+//		final List<Tetrahedron[]> hexahedronList = new ObjectArrayList<>();
+//		final Set<Tetrahedron> used = new ObjectOpenHashSet<>();
+//
+//		for (Tetrahedron tetrahedron : tetrahedronList) {
+//			if (used.contains(tetrahedron)) { continue; }
+//			final Tetrahedron[] array = new Tetrahedron[4];
+//			array[0] = tetrahedron;
+//			int index = 1;
+//			for (Tetrahedron testTet : tetrahedronList) {
+//				if (index == 4) { break; }
+//				if (tetrahedron == testTet) { continue; }
+//				if (used.contains(testTet)) { continue; }
+//
+//				int count = 0;
+//				for (Particle particle : tetrahedron.particles) {
+//					for (Particle firstParticle : testTet.particles) {
+//						if (firstParticle.getIndex() == particle.getIndex()) {
+//							count++;
+//						}
+//					}
+//				}
+//				if (count == 3) {
+//					array[index++] = testTet;
+//				}
+//			}
+//			if (index == 4) {
+//				used.addAll(List.of(array));
+//				hexahedronList.add(array);
+//			}
+//		}
+//
+//		log.info("Found {} hexahedra", hexahedronList.size());
+//		log.info("Used {} tets, {} left", used.size(), tetrahedronList.size() - used.size());
+//
+//		tetrahedra = tetrahedronList.stream().filter(t -> !used.contains(t)).toArray(Tetrahedron[]::new);
+//
+//		System.out.println(tetrahedra.length);
+
 		final double distanceCompliance = 0.002;
 		final double volumeCompliance = 0.000001;
 		constraints = new ObjectArrayList<>(tetrahedra.length * 3);
