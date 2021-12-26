@@ -22,6 +22,7 @@ import xyz.sathro.factory.util.AveragedTimer;
 import xyz.sathro.factory.vulkan.scene.SceneModelVertex;
 import xyz.sathro.vulkan.Vulkan;
 import xyz.sathro.vulkan.VulkanCompute;
+import xyz.sathro.vulkan.buffers.StagedBuffer;
 import xyz.sathro.vulkan.descriptors.DescriptorPool;
 import xyz.sathro.vulkan.descriptors.DescriptorSet;
 import xyz.sathro.vulkan.descriptors.DescriptorSetLayout;
@@ -37,7 +38,7 @@ import java.util.Map;
 
 import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
-import static org.lwjgl.system.MemoryUtil.*;
+import static org.lwjgl.system.MemoryUtil.memDoubleBuffer;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.KHRSynchronization2.*;
 import static org.lwjgl.vulkan.VK10.*;
@@ -69,8 +70,7 @@ public class PhysicsCompute {
 	@Getter private static final Map<Particle, List<Constraint>> particleConstraints = new Object2ObjectOpenHashMap<>();
 	@Getter private static final Object2IntMap<Constraint> constraintColors = new Object2IntOpenHashMap<>();
 
-	private static VulkanBuffer particleCPUBuffer;
-	private static VulkanBuffer particleGPUBuffer;
+	private static StagedBuffer particleBuffer;
 
 	private static DescriptorSetLayout particlesDescriptorSetLayout;
 	private static DescriptorPool particleDescriptorPool;
@@ -78,20 +78,16 @@ public class PhysicsCompute {
 	private static VulkanPipeline integrationPipeline;
 	private static VulkanPipeline velocityPipeline;
 
-	private static VulkanBuffer distanceConstraintIndexStagingBuffer;
-	private static VulkanBuffer distanceConstraintIndexBuffer;
-	private static VulkanBuffer distanceConstraintsStagingBuffer;
-	private static VulkanBuffer distanceConstraintsBuffer;
+	private static StagedBuffer distanceConstraintIndexBuffer;
+	private static StagedBuffer distanceConstraintsBuffer;
 
 	private static DescriptorSetLayout distanceConstraintDescriptorSetLayout;
 	private static DescriptorPool distanceConstraintDescriptorPool;
 	private static DescriptorSet distanceConstraintsDescriptorSet;
 	private static VulkanPipeline distanceConstraintPipeline;
 
-	private static VulkanBuffer volumeConstraintIndexStagingBuffer;
-	private static VulkanBuffer volumeConstraintIndexBuffer;
-	private static VulkanBuffer volumeConstraintsStagingBuffer;
-	private static VulkanBuffer volumeConstraintsBuffer;
+	private static StagedBuffer volumeConstraintIndexBuffer;
+	private static StagedBuffer volumeConstraintsBuffer;
 
 	private static DescriptorSetLayout volumeConstraintDescriptorSetLayout;
 	private static DescriptorPool volumeConstraintDescriptorPool;
@@ -106,19 +102,10 @@ public class PhysicsCompute {
 	private static VulkanPipeline buffersCalculateNormalsPipeline;
 	private static VulkanPipeline buffersFinishNormalsPipeline;
 
-	private static int modelVerticesBufferSize;
-	private static int modelIndexBufferSize;
-	private static int tetrahedraIndexBufferSize;
-	private static int vertexBufferSize;
-
-	private static VulkanBuffer modelVerticesStagingBuffer;
-	private static VulkanBuffer modelVerticesBuffer;
-	private static VulkanBuffer modelIndexStagingBuffer;
-	private static VulkanBuffer modelIndexBuffer;
-	private static VulkanBuffer tetrahedraIndexStagingBuffer;
-	private static VulkanBuffer tetrahedraIndexBuffer;
-	private static VulkanBuffer vertexStagingBuffer;
-	private static VulkanBuffer localVertexBuffer;
+	private static StagedBuffer modelVerticesBuffer;
+	private static StagedBuffer modelIndexBuffer;
+	private static StagedBuffer tetrahedraIndexBuffer;
+	private static StagedBuffer localVertexBuffer;
 	@Getter private static VulkanBuffer vertexBuffer;
 
 	private static CommandPool commandPool;
@@ -160,206 +147,158 @@ public class PhysicsCompute {
 //	}
 
 	public static void allocateParticleBuffers() {
-		if (particleCPUBuffer != null) { particleCPUBuffer.registerToDisposal(); }
-		if (particleGPUBuffer != null) { particleGPUBuffer.registerToDisposal(); }
-
-		particleCPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		particleGPUBuffer = Vulkan.createBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		if (particleBuffer != null) {
+			particleBuffer.reallocate(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true);
+		} else {
+			particleBuffer = new StagedBuffer(particles.size() * PARTICLE_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, true);
+		}
 	}
 
 	public static void allocateConstrainBuffers() {
-		distanceConstraintsStagingBuffer = Vulkan.createBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		distanceConstraintsBuffer = Vulkan.createBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		distanceConstraintIndexBuffer = new StagedBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
+		distanceConstraintsBuffer = new StagedBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
 
-		distanceConstraintIndexStagingBuffer = Vulkan.createBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		distanceConstraintIndexBuffer = Vulkan.createBuffer(distanceConstraints.size() * DISTANCE_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-		volumeConstraintsStagingBuffer = Vulkan.createBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		volumeConstraintsBuffer = Vulkan.createBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-		volumeConstraintIndexStagingBuffer = Vulkan.createBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		volumeConstraintIndexBuffer = Vulkan.createBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		volumeConstraintsBuffer = new StagedBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
+		volumeConstraintIndexBuffer = new StagedBuffer(volumeConstraints.size() * VOLUME_CONSTRAINT_INDEX_SIZE, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
 	}
 
-	public static void allocateModelBuffers(MeshedBody2 meshedBody) {
-		modelVerticesBufferSize = meshedBody.getModelVertices().size() * (Float.BYTES * 3 + Integer.BYTES);
-		modelVerticesStagingBuffer = Vulkan.createBuffer(modelVerticesBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		modelVerticesBuffer = Vulkan.createBuffer(modelVerticesBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+	public static void allocateModelBuffers(MeshedBody meshedBody) {
+		modelVerticesBuffer = new StagedBuffer(meshedBody.getModelVertices().size() * (Float.BYTES * 3 + Integer.BYTES), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
+		modelIndexBuffer = new StagedBuffer(meshedBody.getModelIndices().size() * Integer.BYTES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
 
-		modelIndexBufferSize = meshedBody.getModelIndices().size() * Integer.BYTES;
-		modelIndexStagingBuffer = Vulkan.createBuffer(modelIndexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		modelIndexBuffer = Vulkan.createBuffer(modelIndexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		tetrahedraIndexBuffer = new StagedBuffer(meshedBody.getTetrahedra().length * Integer.BYTES * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, true, false);
+		localVertexBuffer = new StagedBuffer(meshedBody.getModelVertices().size() * SceneModelVertex.SIZEOF, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, true, false);
 
-		tetrahedraIndexBufferSize = meshedBody.getTetrahedra().length * Integer.BYTES * 4;
-		tetrahedraIndexStagingBuffer = Vulkan.createBuffer(tetrahedraIndexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		tetrahedraIndexBuffer = Vulkan.createBuffer(tetrahedraIndexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-		vertexBufferSize = meshedBody.getModelVertices().size() * SceneModelVertex.SIZEOF;
-		vertexStagingBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-		localVertexBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-		vertexBuffer = Vulkan.createBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		vertexBuffer = Vulkan.createBuffer(localVertexBuffer.getBufferSize(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
 		vkResetCommandPool(device, copyCommandPool.handle, 0);
 
 		try (MemoryStack stack = stackPush()) {
 			final VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
-			final VkBufferCopy.Buffer vertexCopyRegion = VkBufferCopy.calloc(1, stack).size(vertexBufferSize);
+			final VkBufferCopy.Buffer vertexCopyRegion = VkBufferCopy.calloc(1, stack).size(localVertexBuffer.getBufferSize());
 
 			vkBeginCommandBuffer(copyCommandBuffer, beginInfo);
-			vkCmdCopyBuffer(copyCommandBuffer, localVertexBuffer.handle, vertexBuffer.handle, vertexCopyRegion);
+			vkCmdCopyBuffer(copyCommandBuffer, localVertexBuffer.getGPUBuffer().handle, vertexBuffer.handle, vertexCopyRegion);
 			vkEndCommandBuffer(copyCommandBuffer);
 		}
 	}
 
 	public static void updateConstraintsBuffers() {
-		try (MemoryStack stack = stackPush()) {
-			final PointerBuffer pointer = stack.mallocPointer(1);
+		log.info("{} tetrahedral constraints, {} distance constraints", volumeConstraints.size(), distanceConstraints.size());
 
-			log.info("{} tetrahedral constraints, {} distance constraints", volumeConstraints.size(), distanceConstraints.size());
-
-			vmaMapMemory(vmaAllocator, distanceConstraintsStagingBuffer.allocation, pointer);
-			{
-				final DoubleBuffer buffer = memDoubleBuffer(pointer.get(0), distanceConstraints.size());
-				int index = 0;
-				for (List<DistanceConstraint> constraints : coloredDistanceConstraints.values()) {
-					for (DistanceConstraint constraint : constraints) {
-						buffer.put(index, constraint.getRestDistance());
-						index++;
-					}
+		distanceConstraintIndexBuffer.updateBuffer(byteBuffer -> {
+			final IntBuffer buffer = byteBuffer.asIntBuffer();
+			int index = 0;
+			for (List<DistanceConstraint> constraints : coloredDistanceConstraints.values()) {
+				for (DistanceConstraint constraint : constraints) {
+					buffer.put(index, constraint.getBody1().getIndex());
+					buffer.put(index + 1, constraint.getBody2().getIndex());
+					index += 2;
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, distanceConstraintsStagingBuffer.allocation);
-			Vulkan.copyBuffer(distanceConstraintsStagingBuffer, distanceConstraintsBuffer, (long) distanceConstraints.size() * Double.BYTES);
+		});
+		distanceConstraintIndexBuffer.copyToGPU();
 
-			vmaMapMemory(vmaAllocator, distanceConstraintIndexStagingBuffer.allocation, pointer);
-			{
-				final IntBuffer buffer = memIntBuffer(pointer.get(0), distanceConstraints.size() * 2);
-				int index = 0;
-				for (List<DistanceConstraint> constraints : coloredDistanceConstraints.values()) {
-					for (DistanceConstraint constraint : constraints) {
-						buffer.put(index, constraint.getBody1().getIndex());
-						buffer.put(index + 1, constraint.getBody2().getIndex());
-						index += 2;
-					}
+		distanceConstraintsBuffer.updateBuffer(byteBuffer -> {
+			final DoubleBuffer buffer = byteBuffer.asDoubleBuffer();
+			int index = 0;
+			for (List<DistanceConstraint> constraints : coloredDistanceConstraints.values()) {
+				for (DistanceConstraint constraint : constraints) {
+					buffer.put(index, constraint.getRestDistance());
+					index++;
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, distanceConstraintIndexStagingBuffer.allocation);
-			Vulkan.copyBuffer(distanceConstraintIndexStagingBuffer, distanceConstraintIndexBuffer, (long) distanceConstraints.size() * Integer.BYTES * 2);
+		});
+		distanceConstraintsBuffer.copyToGPU();
 
-			vmaMapMemory(vmaAllocator, volumeConstraintsStagingBuffer.allocation, pointer);
-			{
-				final DoubleBuffer buffer = memDoubleBuffer(pointer.get(0), volumeConstraints.size());
-				int index = 0;
-				for (List<TetrahedralVolumeConstraint> constraints : coloredVolumeConstraints.values()) {
-					for (TetrahedralVolumeConstraint constraint : constraints) {
-						buffer.put(index, constraint.getRestVolume());
-						index++;
-					}
+		volumeConstraintsBuffer.updateBuffer(byteBuffer -> {
+			final DoubleBuffer buffer = byteBuffer.asDoubleBuffer();
+			int index = 0;
+			for (List<TetrahedralVolumeConstraint> constraints : coloredVolumeConstraints.values()) {
+				for (TetrahedralVolumeConstraint constraint : constraints) {
+					buffer.put(index, constraint.getRestVolume());
+					index++;
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, volumeConstraintsStagingBuffer.allocation);
-			Vulkan.copyBuffer(volumeConstraintsStagingBuffer, volumeConstraintsBuffer, (long) volumeConstraints.size() * Double.BYTES);
+		});
+		volumeConstraintsBuffer.copyToGPU();
 
-			vmaMapMemory(vmaAllocator, volumeConstraintIndexStagingBuffer.allocation, pointer);
-			{
-				final IntBuffer buffer = memIntBuffer(pointer.get(0), volumeConstraints.size() * 4);
-				int index = 0;
-				for (List<TetrahedralVolumeConstraint> constraints : coloredVolumeConstraints.values()) {
-					for (TetrahedralVolumeConstraint constraint : constraints) {
-						for (int i = 0; i < constraint.getParticles().length; i++) {
-							buffer.put(index + i, constraint.getParticles()[i].getIndex());
-						}
-						index += 4;
+		volumeConstraintIndexBuffer.updateBuffer(byteBuffer -> {
+			final IntBuffer buffer = byteBuffer.asIntBuffer();
+			int index = 0;
+			for (List<TetrahedralVolumeConstraint> constraints : coloredVolumeConstraints.values()) {
+				for (TetrahedralVolumeConstraint constraint : constraints) {
+					for (int i = 0; i < constraint.getParticles().length; i++) {
+						buffer.put(index + i, constraint.getParticles()[i].getIndex());
 					}
+					index += 4;
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, volumeConstraintIndexStagingBuffer.allocation);
-			Vulkan.copyBuffer(volumeConstraintIndexStagingBuffer, volumeConstraintIndexBuffer, (long) volumeConstraints.size() * Integer.BYTES * 4);
-		}
+		});
+		volumeConstraintIndexBuffer.copyToGPU();
 	}
 
 	public static void updateParticlesBuffers() {
-		try (MemoryStack stack = stackPush()) {
-			final PointerBuffer pointer = stack.mallocPointer(1);
+		particleBuffer.updateBuffer((byteBuffer -> {
+			final DoubleBuffer buffer = byteBuffer.asDoubleBuffer();
 
-			vmaMapMemory(vmaAllocator, particleCPUBuffer.allocation, pointer);
-			{
-				final DoubleBuffer buffer = memDoubleBuffer(pointer.get(0), particles.size() * VALUES_IN_PARTICLE);
-				Particle particle;
-				for (int i = 0; i < particles.size(); i++) {
-					particle = particles.get(i);
-					particle.getPosition().get(i * VALUES_IN_PARTICLE, buffer);
-					buffer.put(i * VALUES_IN_PARTICLE + 3, particle.getMass());
+			Particle particle;
+			for (int i = 0; i < particles.size(); i++) {
+				particle = particles.get(i);
+				particle.getPosition().get(i * VALUES_IN_PARTICLE, buffer);
+				buffer.put(i * VALUES_IN_PARTICLE + 3, particle.getMass());
 
-					particle.getPrevPosition().get(i * VALUES_IN_PARTICLE + 4, buffer);
-					buffer.put(i * VALUES_IN_PARTICLE + 7, particle.getInvMass());
+				particle.getPrevPosition().get(i * VALUES_IN_PARTICLE + 4, buffer);
+				buffer.put(i * VALUES_IN_PARTICLE + 7, particle.getInvMass());
 
-					particle.getVelocity().get(i * VALUES_IN_PARTICLE + 8, buffer);
-				}
+				particle.getVelocity().get(i * VALUES_IN_PARTICLE + 8, buffer);
 			}
-			vmaUnmapMemory(vmaAllocator, particleCPUBuffer.allocation);
-			Vulkan.copyBuffer(particleCPUBuffer, particleGPUBuffer, (long) particles.size() * PARTICLE_SIZE);
-		}
+		}));
+		particleBuffer.copyToGPU();
 	}
 
-	public static void updateModelBuffers(MeshedBody2 meshedBody) {
-		try (MemoryStack stack = stackPush()) {
-			final PointerBuffer pointer = stack.mallocPointer(1);
+	public static void updateModelBuffers(MeshedBody meshedBody) {
+		modelVerticesBuffer.updateBuffer(byteBuffer -> {
+			MeshedBody.AttachedVertex vertex;
+			for (int i = 0; i < meshedBody.getModelVertices().size(); i++) {
+				vertex = meshedBody.getModelVertices().get(i);
 
-			vmaMapMemory(vmaAllocator, modelVerticesStagingBuffer.allocation, pointer);
-			{
-				final ByteBuffer buffer = memByteBuffer(pointer.get(0), modelVerticesBufferSize);
+				byteBuffer.putInt(i * (Float.BYTES * 3 + Integer.BYTES), vertex.tetIndex);
+				byteBuffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 4, (float) vertex.baryX);
+				byteBuffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 8, (float) vertex.baryY);
+				byteBuffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 12, (float) vertex.baryZ);
+			}
+		});
+		modelVerticesBuffer.copyToGPU();
 
-				MeshedBody2.AttachedVertex vertex;
-				for (int i = 0; i < meshedBody.getModelVertices().size(); i++) {
-					vertex = meshedBody.getModelVertices().get(i);
+		modelIndexBuffer.updateBuffer(byteBuffer -> {
+			byteBuffer.asIntBuffer().put(0, meshedBody.getModelIndices().toIntArray());
+		});
+		modelIndexBuffer.copyToGPU();
 
-					buffer.putInt(i * (Float.BYTES * 3 + Integer.BYTES), vertex.tetIndex);
-					buffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 4, (float) vertex.baryX);
-					buffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 8, (float) vertex.baryY);
-					buffer.putFloat(i * (Float.BYTES * 3 + Integer.BYTES) + 12, (float) vertex.baryZ);
+		tetrahedraIndexBuffer.updateBuffer(byteBuffer -> {
+			final IntBuffer buffer = byteBuffer.asIntBuffer();
+
+			IMesh.Tetrahedron tetrahedron;
+			for (int i = 0; i < meshedBody.getTetrahedra().length; i++) {
+				tetrahedron = meshedBody.getTetrahedra()[i];
+
+				for (int j = 0; j < 4; j++) {
+					buffer.put(i * 4 + j, tetrahedron.particles[j].getIndex());
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, modelVerticesStagingBuffer.allocation);
-			Vulkan.copyBuffer(modelVerticesStagingBuffer, modelVerticesBuffer, modelVerticesBufferSize);
+		});
+		tetrahedraIndexBuffer.copyToGPU();
 
-			vmaMapMemory(vmaAllocator, modelIndexStagingBuffer.allocation, pointer);
-			{
-				final IntBuffer buffer = memIntBuffer(pointer.get(0), modelIndexBufferSize / Integer.BYTES);
+		final Vector3f color = new Vector3f(0.9f, 0.6f, 0.3f);
+		localVertexBuffer.updateBuffer(byteBuffer -> {
+			final FloatBuffer buffer = byteBuffer.asFloatBuffer();
 
-				buffer.put(0, meshedBody.getModelIndices().toIntArray());
+			for (int i = 0; i < meshedBody.getModelVertices().size(); i++) {
+				color.get(i * 9 + 3, buffer);
 			}
-			vmaUnmapMemory(vmaAllocator, modelIndexStagingBuffer.allocation);
-			Vulkan.copyBuffer(modelIndexStagingBuffer, modelIndexBuffer, modelIndexBufferSize);
-
-			vmaMapMemory(vmaAllocator, tetrahedraIndexStagingBuffer.allocation, pointer);
-			{
-				final IntBuffer buffer = memIntBuffer(pointer.get(0), tetrahedraIndexBufferSize / Integer.BYTES);
-
-				IMesh.Tetrahedron tetrahedron;
-				for (int i = 0; i < meshedBody.getTetrahedra().length; i++) {
-					tetrahedron = meshedBody.getTetrahedra()[i];
-
-					for (int j = 0; j < 4; j++) {
-						buffer.put(i * 4 + j, tetrahedron.particles[j].getIndex());
-					}
-				}
-			}
-			vmaUnmapMemory(vmaAllocator, tetrahedraIndexStagingBuffer.allocation);
-			Vulkan.copyBuffer(tetrahedraIndexStagingBuffer, tetrahedraIndexBuffer, tetrahedraIndexBufferSize);
-
-			final Vector3f color = new Vector3f(0.9f, 0.6f, 0.3f);
-			vmaMapMemory(vmaAllocator, vertexStagingBuffer.allocation, pointer);
-			{
-				final FloatBuffer buffer = memFloatBuffer(pointer.get(0), vertexBufferSize / Float.BYTES);
-
-				for (int i = 0; i < meshedBody.getModelVertices().size(); i++) {
-					color.get(i * 9 + 3, buffer);
-				}
-			}
-			vmaUnmapMemory(vmaAllocator, vertexStagingBuffer.allocation);
-			Vulkan.copyBuffer(vertexStagingBuffer, localVertexBuffer, vertexBufferSize);
-		}
+		});
+		localVertexBuffer.copyToGPU();
 	}
 
 	public static void createDescriptorSets() {
@@ -378,28 +317,28 @@ public class PhysicsCompute {
 
 	public static void updateParticleDescriptorSet() {
 		particleDescriptorSet.updateBuilder()
-				.write(0).buffer(particleGPUBuffer).add()
+				.write(0).buffer(particleBuffer.getGPUBuffer()).add()
 				.update();
 	}
 
 	public static void updateConstraintsDescriptorSet() {
 		distanceConstraintsDescriptorSet.updateBuilder()
-				.write(0).buffer(distanceConstraintIndexBuffer).add()
-				.write(1).buffer(distanceConstraintsBuffer).add()
+				.write(0).buffer(distanceConstraintIndexBuffer.getGPUBuffer()).add()
+				.write(1).buffer(distanceConstraintsBuffer.getGPUBuffer()).add()
 				.update();
 
 		volumeConstraintsDescriptorSet.updateBuilder()
-				.write(0).buffer(volumeConstraintIndexBuffer).add()
-				.write(1).buffer(volumeConstraintsBuffer).add()
+				.write(0).buffer(volumeConstraintIndexBuffer.getGPUBuffer()).add()
+				.write(1).buffer(volumeConstraintsBuffer.getGPUBuffer()).add()
 				.update();
 	}
 
 	public static void updateBuffersDescriptorSet() {
 		buffersDescriptorSet.updateBuilder()
-				.write(0).buffer(modelVerticesBuffer).add()
-				.write(1).buffer(tetrahedraIndexBuffer).add()
-				.write(2).buffer(modelIndexBuffer).add()
-				.write(3).buffer(localVertexBuffer).add()
+				.write(0).buffer(modelVerticesBuffer.getGPUBuffer()).add()
+				.write(1).buffer(tetrahedraIndexBuffer.getGPUBuffer()).add()
+				.write(2).buffer(modelIndexBuffer.getGPUBuffer()).add()
+				.write(3).buffer(localVertexBuffer.getGPUBuffer()).add()
 				.update();
 	}
 
@@ -497,49 +436,48 @@ public class PhysicsCompute {
 				if (localVertexBuffer != null) {
 					// updateModelBuffers
 					// updateBarycentric
-					pushConstants.putInt(24, modelVerticesBufferSize / (Integer.BYTES + 3 * Float.BYTES));
+					pushConstants.putInt(24, modelVerticesBuffer.getBufferSize() / (Integer.BYTES + 3 * Float.BYTES));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersBarycentricPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersBarycentricPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersBarycentricPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersBarycentricPipeline.layout, 1, buffersDescriptorSetPointer, null);
-					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelVerticesBufferSize / (Integer.BYTES + 3 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
+					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelVerticesBuffer.getBufferSize() / (Integer.BYTES + 3 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// zero normals
-					pushConstants.putInt(24, modelVerticesBufferSize / (Integer.BYTES + 3 * Float.BYTES));
+					pushConstants.putInt(24, modelVerticesBuffer.getBufferSize() / (Integer.BYTES + 3 * Float.BYTES));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersZeroNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersZeroNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersZeroNormalsPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersZeroNormalsPipeline.layout, 1, buffersDescriptorSetPointer, null);
-					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelVerticesBufferSize / (Integer.BYTES + 3 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
+					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelVerticesBuffer.getBufferSize() / (Integer.BYTES + 3 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// calculate normals
-					pushConstants.putInt(24, modelIndexBufferSize / (Integer.BYTES * 3));
+					pushConstants.putInt(24, modelIndexBuffer.getBufferSize() / (Integer.BYTES * 3));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersCalculateNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersCalculateNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersCalculateNormalsPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersCalculateNormalsPipeline.layout, 1, buffersDescriptorSetPointer, null);
-					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelIndexBufferSize / (Integer.BYTES * 3) / WORKGROUP_COUNT), 1, 1);
+					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) modelIndexBuffer.getBufferSize() / (Integer.BYTES * 3) / WORKGROUP_COUNT), 1, 1);
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// normalize normals
-					pushConstants.putInt(24, vertexBufferSize / (9 * Float.BYTES));
+					pushConstants.putInt(24, localVertexBuffer.getBufferSize() / (9 * Float.BYTES));
 					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersFinishNormalsPipeline.handle);
 					vkCmdPushConstants(commandBuffer, buffersFinishNormalsPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersFinishNormalsPipeline.layout, 0, particleDescriptorSetPointer, null);
 					vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, buffersFinishNormalsPipeline.layout, 1, buffersDescriptorSetPointer, null);
-					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) vertexBufferSize / (9 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
+					vkCmdDispatch(commandBuffer, (int) Math.ceil((float) localVertexBuffer.getBufferSize() / (9 * Float.BYTES) / WORKGROUP_COUNT), 1, 1);
 
 					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// update particle buffer
-
-					final VkBufferCopy.Buffer particlesCopyRegion = VkBufferCopy.calloc(1, stack).size((long) particles.size() * PARTICLE_SIZE);
-					vkCmdCopyBuffer(commandBuffer, particleGPUBuffer.handle, particleCPUBuffer.handle, particlesCopyRegion);
+					final VkBufferCopy.Buffer particlesCopyRegion = VkBufferCopy.calloc(1, stack).size(particleBuffer.getBufferSize());
+					vkCmdCopyBuffer(commandBuffer, particleBuffer.getGPUBuffer().handle, particleBuffer.getCPUBuffer().handle, particlesCopyRegion);
 				}
 			}
 			vkEndCommandBuffer(commandBuffer);
@@ -631,7 +569,38 @@ public class PhysicsCompute {
 
 	@SubscribeEvent
 	public static void onVulkanDispose(VulkanDisposeEvent event) {
+		particlesDescriptorSetLayout.dispose();
+		distanceConstraintDescriptorSetLayout.dispose();
+		volumeConstraintDescriptorSetLayout.dispose();
+		buffersDescriptorSetLayout.dispose();
 
+		particleDescriptorPool.dispose();
+		distanceConstraintDescriptorPool.dispose();
+		volumeConstraintDescriptorPool.dispose();
+		buffersDescriptorPool.dispose();
+
+		buffersFinishNormalsPipeline.dispose();
+		buffersCalculateNormalsPipeline.dispose();
+		buffersZeroNormalsPipeline.dispose();
+		distanceConstraintPipeline.dispose();
+		volumeConstraintPipeline.dispose();
+		buffersBarycentricPipeline.dispose();
+		velocityPipeline.dispose();
+		integrationPipeline.dispose();
+
+		commandPool.dispose();
+		copyCommandPool.dispose();
+
+		particleBuffer.dispose();
+		distanceConstraintIndexBuffer.dispose();
+		distanceConstraintsBuffer.dispose();
+		volumeConstraintIndexBuffer.dispose();
+		volumeConstraintsBuffer.dispose();
+		modelVerticesBuffer.dispose();
+		modelIndexBuffer.dispose();
+		tetrahedraIndexBuffer.dispose();
+		localVertexBuffer.dispose();
+		vertexBuffer.dispose();
 	}
 
 	public static void simulate() {
@@ -642,10 +611,9 @@ public class PhysicsCompute {
 					.pCommandBuffers(stack.pointers(commandBuffer));
 
 			timer.startRecording();
+			vkResetFences(device, commandPool.fence);
 			queues.compute.submitAndWait(submitInfo, commandPool.fence);
 			timer.endRecording();
-
-			vkResetFences(device, commandPool.fence);
 
 			updateParticles();
 		}
@@ -658,11 +626,13 @@ public class PhysicsCompute {
 					.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
 					.pCommandBuffers(stack.pointers(copyCommandBuffer));
 
-			vkResetFences(device, copyCommandPool.fence);
-			queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
+			synchronized (PhysicsCompute.copyCommandPool) {
+				vkResetFences(device, copyCommandPool.fence);
+				queues.transfer.submitAndWait(submitInfo, copyCommandPool.fence);
+			}
 
 			final PointerBuffer pointer = stack.mallocPointer(1);
-			vmaMapMemory(vmaAllocator, particleCPUBuffer.allocation, pointer);
+			vmaMapMemory(vmaAllocator, particleBuffer.getCPUBuffer().allocation, pointer);
 			{
 				final DoubleBuffer buffer = memDoubleBuffer(pointer.get(0), particles.size() * PARTICLE_SIZE);
 				int index = 0;
@@ -675,7 +645,7 @@ public class PhysicsCompute {
 					index += VALUES_IN_PARTICLE;
 				}
 			}
-			vmaUnmapMemory(vmaAllocator, particleCPUBuffer.allocation);
+			vmaUnmapMemory(vmaAllocator, particleBuffer.getCPUBuffer().allocation);
 //			log.info("Copying particles: {}ms", (System.nanoTime() - time0) / 1_000_000d);
 		}
 	}

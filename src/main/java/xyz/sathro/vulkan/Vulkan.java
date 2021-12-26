@@ -93,8 +93,8 @@ public class Vulkan {
 	public static final boolean integratedGPU;
 	private static final IntSet suppressedDebugMessageIDs;
 
-	public static final boolean msaaEnabled = false; // TODO: proper support for turning msaa on and off
-	public static int msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	public static final boolean msaaEnabled = true; // TODO: proper support for turning msaa on and off
+	public static int msaaSamples = VK_SAMPLE_COUNT_2_BIT;
 
 	public static QueueFamilies queues;
 	public static VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc();
@@ -700,6 +700,18 @@ public class Vulkan {
 		}
 	}
 
+	public static void copyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, long size, long fence) {
+		try (MemoryStack stack = stackPush();
+		     DefaultCommandPool commandPool = DefaultCommandPools.takeTransferPool()) {
+			final VkCommandBuffer commandBuffer = CommandBuffers.beginSingleTimeCommands(commandPool.handle, stack);
+			final VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack).size(size);
+
+			vkCmdCopyBuffer(commandBuffer, srcBuffer.handle, dstBuffer.handle, copyRegion);
+
+			CommandBuffers.endSingleTimeCommands(commandBuffer, commandPool.handle, fence, queues.transfer, stack);
+		}
+	}
+
 	public static long createShaderModule(String path, int shaderType) {
 		try (MemoryStack stack = stackPush()) {
 			final ByteBuffer code = compileShader(path, shaderType);
@@ -904,6 +916,7 @@ public class Vulkan {
 	}
 
 	public static void cleanup() {
+		EventManager.callEvent(new VulkanDisposeEvent());
 		cleanupSwapChain();
 		if (swapChainHandle != VK_NULL_HANDLE) {
 			vkDestroySwapchainKHR(device, swapChainHandle, null);
@@ -938,8 +951,6 @@ public class Vulkan {
 		glfwDestroyWindow(handle);
 
 		glfwTerminate();
-
-		EventManager.callEvent(new VulkanDisposeEvent());
 	}
 
 	public static long createCommandPool(int flags, VulkanQueue queue) {

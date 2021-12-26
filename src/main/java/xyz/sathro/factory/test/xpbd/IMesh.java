@@ -4,11 +4,12 @@ import lombok.AllArgsConstructor;
 import org.joml.Vector3d;
 import xyz.sathro.factory.test.xpbd.body.Particle;
 import xyz.sathro.factory.test.xpbd.constraint.Constraint;
+import xyz.sathro.vulkan.models.IDisposable;
 import xyz.sathro.vulkan.models.VulkanBuffer;
 
 import java.util.List;
 
-public interface IMesh {
+public interface IMesh extends IDisposable {
 	VulkanBuffer getVertexBuffer();
 	VulkanBuffer getIndexBuffer();
 	int getIndexCount();

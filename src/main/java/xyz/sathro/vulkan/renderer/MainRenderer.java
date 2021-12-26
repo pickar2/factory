@@ -161,7 +161,9 @@ public class MainRenderer {
 					.pSignalSemaphores(currentFrame.pRenderFinishedSemaphore())
 					.pCommandBuffers(stack.pointers(primaryCommandBuffers[imageIndex]));
 
-			vkWaitForFences(device, PhysicsCompute.copyCommandPool.fence, true, UINT64_MAX);
+			synchronized (PhysicsCompute.copyCommandPool) {
+				vkWaitForFences(device, PhysicsCompute.copyCommandPool.fence, true, UINT64_MAX);
+			}
 			vkResetFences(device, currentFrame.pFence());
 			synchronized (queues.graphics) {
 				vkResult = vkQueueSubmit(queues.graphics.queue, submitInfo, currentFrame.fence());

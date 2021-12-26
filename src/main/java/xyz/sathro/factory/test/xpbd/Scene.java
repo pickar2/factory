@@ -49,7 +49,7 @@ public class Scene {
 		final IntList tetrahedraIndices = new IntArrayList();
 		loadTetModel("models/newDragon.tet", vertices, tetrahedraIndices);
 
-		final List<MeshedBody2.AttachedVertex> surfaceVertices = new ObjectArrayList<>();
+		final List<MeshedBody.AttachedVertex> surfaceVertices = new ObjectArrayList<>();
 		IntList surfaceIndices = new IntArrayList();
 		loadTetSurfModel("models/newDragon.tetsurf", surfaceVertices, surfaceIndices);
 
@@ -67,7 +67,7 @@ public class Scene {
 			vertex.y += 1;
 		}
 
-		final IMesh body = new MeshedBody2(vertices, tetrahedraIndices, surfaceVertices, surfaceIndices);
+		final IMesh body = new MeshedBody(vertices, tetrahedraIndices, surfaceVertices, surfaceIndices);
 		meshes.add(body);
 
 		bodies.addAll(List.of(body.getParticles()));
@@ -133,7 +133,7 @@ public class Scene {
 		}
 	}
 
-	private static void loadTetSurfModel(String path, List<MeshedBody2.AttachedVertex> vertices, IntList indices) {
+	private static void loadTetSurfModel(String path, List<MeshedBody.AttachedVertex> vertices, IntList indices) {
 		try {
 			final List<String> lines = Files.readAllLines(ResourceManager.getPathFromString(path));
 			final String[] split = lines.get(0).split(" ");
@@ -141,7 +141,7 @@ public class Scene {
 			final int triangleCount = Integer.parseInt(split[2]);
 			for (int i = 1; i < 1 + vertexCount; i++) {
 				final String[] line = lines.get(i).split(" ");
-				vertices.add(new MeshedBody2.AttachedVertex(
+				vertices.add(new MeshedBody.AttachedVertex(
 						Integer.parseInt(line[0]),
 						Double.parseDouble(line[1]),
 						Double.parseDouble(line[2]),
@@ -300,8 +300,8 @@ public class Scene {
 
 			PhysicsCompute.updateConstraints();
 
-			PhysicsCompute.allocateModelBuffers((MeshedBody2) mesh);
-			PhysicsCompute.updateModelBuffers((MeshedBody2) mesh);
+			PhysicsCompute.allocateModelBuffers((MeshedBody) mesh);
+			PhysicsCompute.updateModelBuffers((MeshedBody) mesh);
 			PhysicsCompute.updateBuffersDescriptorSet();
 
 			PhysicsCompute.fillCommandBuffer();
@@ -321,6 +321,9 @@ public class Scene {
 	@SubscribeEvent
 	public void onVulkanDispose(VulkanDisposeEvent event) {
 		threadPool.shutdown();
+		for (IMesh mesh : meshes) {
+			mesh.dispose();
+		}
 	}
 
 	@SubscribeEvent
