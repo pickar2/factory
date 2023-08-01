@@ -68,7 +68,7 @@ readonly layout(push_constant) uniform constants {
 void main() {
 	if (gl_GlobalInvocationID.x >= count) return;
 
-	int tetIndex = modelVertices[gl_GlobalInvocationID.x].tetIndex;
+	int tetIndex = modelVertices[gl_GlobalInvocationID.x].tetIndex * 4;
 	float baryW = 1 - modelVertices[gl_GlobalInvocationID.x].baryX - modelVertices[gl_GlobalInvocationID.x].baryY - modelVertices[gl_GlobalInvocationID.x].baryZ;
 
 	vertices[gl_GlobalInvocationID.x].posX = 0;
@@ -76,22 +76,22 @@ void main() {
 	vertices[gl_GlobalInvocationID.x].posZ = 0;
 
 	vec3 vec;
-	vec = vec3(particles[indices[tetIndex * 4]].position) * modelVertices[gl_GlobalInvocationID.x].baryX;
+	vec = vec3(particles[indices[tetIndex]].position) * modelVertices[gl_GlobalInvocationID.x].baryX;
 	vertices[gl_GlobalInvocationID.x].posX += vec.x;
 	vertices[gl_GlobalInvocationID.x].posY += vec.y;
 	vertices[gl_GlobalInvocationID.x].posZ += vec.z;
 
-	vec = vec3(particles[indices[tetIndex * 4 + 1]].position) * modelVertices[gl_GlobalInvocationID.x].baryY;
+	vec = vec3(particles[indices[tetIndex + 1]].position) * modelVertices[gl_GlobalInvocationID.x].baryY;
 	vertices[gl_GlobalInvocationID.x].posX += vec.x;
 	vertices[gl_GlobalInvocationID.x].posY += vec.y;
 	vertices[gl_GlobalInvocationID.x].posZ += vec.z;
 
-	vec = vec3(particles[indices[tetIndex * 4 + 2]].position) * modelVertices[gl_GlobalInvocationID.x].baryZ;
+	vec = vec3(particles[indices[tetIndex + 2]].position) * modelVertices[gl_GlobalInvocationID.x].baryZ;
 	vertices[gl_GlobalInvocationID.x].posX += vec.x;
 	vertices[gl_GlobalInvocationID.x].posY += vec.y;
 	vertices[gl_GlobalInvocationID.x].posZ += vec.z;
 
-	vec = vec3(particles[indices[tetIndex * 4 + 3]].position) * baryW;
+	vec = vec3(particles[indices[tetIndex + 3]].position) * baryW;
 	vertices[gl_GlobalInvocationID.x].posX += vec.x;
 	vertices[gl_GlobalInvocationID.x].posY += vec.y;
 	vertices[gl_GlobalInvocationID.x].posZ += vec.z;

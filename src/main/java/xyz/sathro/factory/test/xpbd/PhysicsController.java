@@ -31,7 +31,7 @@ public class PhysicsController {
 		while (!Window.shouldClose) {
 			lag += timer.getElapsedTimeAndReset();
 			if (lag >= MS_PER_UPDATE) {
-				PhysicsController.timer.startRecording();
+ 				PhysicsController.timer.startRecording();
 
 				if (isSimulating || simulateOneFrame) {
 					simulateOneFrame = false;

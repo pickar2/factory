@@ -109,7 +109,7 @@ public class Interface {
 	public void init() {
 		root = new BasicUIComponent();
 //		initTestUIText();
-		initTestUIGrid();
+//		initTestUIGrid();
 		componentList = addNodeToList(root, new ObjectArrayList<>());
 		updateUIRenderer(true);
 	}
@@ -135,6 +135,7 @@ public class Interface {
 		final Label label = new Label(font, "Hello world!");
 
 		label.addConstraint(new SetPositionConstraint(UIVector.builder(new Vector2i(5)).relative().both()));
+//		label.addConstraint(new SetSizeConstraint(new UIVector<>(ABSOLUTE, Y, new Vector2d(5))));
 
 		root.addComponent(label);
 

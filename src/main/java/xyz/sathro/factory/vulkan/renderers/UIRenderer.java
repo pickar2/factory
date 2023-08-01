@@ -459,6 +459,7 @@ public class UIRenderer implements IRenderer {
 
 	public void updateMatrixBuffers() {
 		matrixUBO.proj.identity().setOrtho(0, Vulkan.swapChainExtent.width(), 0, Vulkan.swapChainExtent.height(), 2, -2);
+//		matrixUBO.proj.rotateZ(0.1f);
 		for (VulkanBuffer buffer : matrixUniformBuffers) {
 			Vulkan.mapDataToVulkanBuffer(matrixUBO, buffer);
 		}

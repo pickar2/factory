@@ -418,10 +418,11 @@ public class PhysicsCompute {
 						pushConstants.putInt(28, offset);
 						vkCmdPushConstants(commandBuffer, volumeConstraintPipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstants);
 						vkCmdDispatch(commandBuffer, (int) Math.ceil((float) constraints.size() / WORKGROUP_COUNT), 1, 1);
-						vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
+						//vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 						offset += constraints.size();
 					}
+					vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
 
 					// update velocities
 					pushConstants.putInt(24, particles.size());

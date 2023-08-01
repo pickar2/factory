@@ -27,7 +27,7 @@ void main() {
 	fragNormal = normalize((view * model * vec4(normal, 0)).xyz);
 
 	vec3 vertexPosition_cameraspace = ( view * model * vec4(position, 1)).xyz;
-	vec3 eyeDir = vec3(0,0,0) - vertexPosition_cameraspace;
+	vec3 eyeDir = -vertexPosition_cameraspace;
 	vec3 LightPosition_cameraspace = (view * vec4(lightPos, 1)).xyz;
 
 	lightDirection = normalize(eyeDir);

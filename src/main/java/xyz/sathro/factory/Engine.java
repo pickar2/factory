@@ -9,6 +9,7 @@ import org.lwjgl.system.Configuration;
 import xyz.sathro.factory.event.EventManager;
 import xyz.sathro.factory.test.xpbd.PhysicsController;
 import xyz.sathro.factory.util.Timer;
+import xyz.sathro.factory.vulkan.renderers.UIRenderer;
 import xyz.sathro.factory.vulkan.scene.SceneRenderer;
 import xyz.sathro.factory.window.MouseInput;
 import xyz.sathro.factory.window.Window;
@@ -106,7 +107,7 @@ public class Engine {
 		try {
 			Window.init();
 			MouseInput.init();
-			Vulkan.initVulkan(List.of(SceneRenderer.INSTANCE));
+			Vulkan.initVulkan(List.of(SceneRenderer.INSTANCE, UIRenderer.INSTANCE));
 
 			renderThread.setName("render");
 			physicsThread.setName("physics");

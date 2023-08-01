@@ -448,7 +448,8 @@ public class Vulkan {
 
 			VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloat = VkPhysicalDeviceShaderAtomicFloatFeaturesEXT.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT)
-					.shaderBufferFloat32AtomicAdd(true);
+					.shaderBufferFloat32AtomicAdd(true)
+					.shaderBufferFloat64AtomicAdd(true);
 
 			VkPhysicalDeviceFeatures2 deviceFeatures2 = VkPhysicalDeviceFeatures2.calloc(stack)
 					.sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)

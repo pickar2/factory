@@ -81,7 +81,7 @@ void main() {
 
 	double s = (restVolumes[XPlusOffset] - currentVolume) / (w + compliance * invDtSquared);
 
-//	if(abs(s) < 0.0000001) { return; }
+	if(abs(s) < 0.0000001) { return; }
 
 	for (int i = 0; i < 4; i++) {
 		particles[indices[i]].position += s * particles[indices[i]].invMass * grads[i];
